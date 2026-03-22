@@ -8,12 +8,12 @@ import uuid
 from functools import wraps
 from pathlib import Path
 
-from flask import Flask, render_template, request, send_from_directory, abort, Response
+from flask import Flask, Response, abort, render_template, request, send_from_directory
 
-from tundralis.utils import load_survey_data, prepare_sparse_model_data
-from tundralis.ingestion import infer_predictors, load_mapping_config, resolve_config, validate_resolved_config
 from tundralis.analysis import run_kda
-from tundralis.charts import chart_importance_bar, chart_quadrant, chart_model_fit
+from tundralis.charts import chart_importance_bar, chart_model_fit, chart_quadrant
+from tundralis.ingestion import infer_predictors, load_mapping_config, resolve_config, validate_resolved_config
+from tundralis.utils import load_survey_data, prepare_sparse_model_data
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_DIR = ROOT / "app_runtime"
@@ -23,11 +23,7 @@ ARTIFACT_DIR = RUNTIME_DIR / "artifacts"
 for p in [UPLOAD_DIR, MAPPING_DIR, ARTIFACT_DIR]:
     p.mkdir(parents=True, exist_ok=True)
 
-app = Flask(
-    __name__,
-    template_folder=str(ROOT / "web" / "templates"),
-    static_folder=str(ROOT / "web" / "static"),
-)
+app = Flask(__name__, template_folder=str(ROOT / "web" / "templates"), static_folder=str(ROOT / "web" / "static"))
 
 
 def _auth_ok() -> bool:
@@ -47,11 +43,7 @@ def _auth_ok() -> bool:
 
 
 def _require_auth():
-    return Response(
-        "Authentication required",
-        401,
-        {"WWW-Authenticate": 'Basic realm="tundralis"'},
-    )
+    return Response("Authentication required", 401, {"WWW-Authenticate": 'Basic realm="tundralis"'})
 
 
 def basic_auth(view):
@@ -94,19 +86,10 @@ def _write_preview_charts(job_id: str, data_path: Path, mapping_path: Path) -> l
 
 
 def _detect_target(columns: list[str], numeric_columns: list[str]) -> str | None:
-    target_candidates = [
-        "overall_satisfaction",
-        "overall_sat",
-        "overall",
-        "nps",
-        "likelihood_to_recommend",
-    ]
+    target_candidates = ["overall_satisfaction", "overall_sat", "overall", "nps", "likelihood_to_recommend"]
     inferred_target = next((c for c in target_candidates if c in columns), None)
     if inferred_target is None and numeric_columns:
-        inferred_target = next(
-            (c for c in numeric_columns if "overall" in c.lower() or "satisfaction" in c.lower()),
-            numeric_columns[0],
-        )
+        inferred_target = next((c for c in numeric_columns if "overall" in c.lower() or "satisfaction" in c.lower()), numeric_columns[0])
     return inferred_target
 
 
@@ -139,7 +122,6 @@ def inspect_file():
     numeric_columns = df.select_dtypes(include="number").columns.tolist()
     inferred_target = _detect_target(columns, numeric_columns)
     inferred_predictors = _suggested_predictors(df, inferred_target)
-    id_candidates = [c for c in columns if c.lower() in {"response_id", "respondent_id", "record_id", "id"} or c.lower().endswith("_id")]
 
     return render_template(
         "mapping.html",
@@ -149,7 +131,6 @@ def inspect_file():
         numeric_columns=numeric_columns,
         inferred_target=inferred_target,
         inferred_predictors=inferred_predictors,
-        id_candidates=id_candidates,
     )
 
 
@@ -164,9 +145,7 @@ def run_job():
     data_path = UPLOAD_DIR / filename
     predictors = request.form.getlist("predictor_columns")
     target_column = request.form.get("target_column")
-    respondent_id_column = request.form.get("respondent_id_column") or None
     segment_columns = request.form.getlist("segment_columns")
-    excluded_columns = request.form.getlist("excluded_columns")
 
     display_name_map = {}
     for key, value in request.form.items():
@@ -175,9 +154,7 @@ def run_job():
 
     mapping = {
         "target_column": target_column,
-        "respondent_id_column": respondent_id_column,
         "segment_columns": segment_columns,
-        "excluded_columns": excluded_columns,
         "predictor_columns": predictors,
         "display_name_map": display_name_map,
     }
@@ -205,7 +182,6 @@ def run_job():
         numeric_columns = df.select_dtypes(include="number").columns.tolist()
         inferred_target = _detect_target(columns, numeric_columns)
         inferred_predictors = _suggested_predictors(df, inferred_target)
-        id_candidates = [c for c in columns if c.lower() in {"response_id", "respondent_id", "record_id", "id"} or c.lower().endswith("_id")]
         return render_template(
             "mapping.html",
             error=result.stderr or result.stdout or "Run failed.",
@@ -215,7 +191,6 @@ def run_job():
             numeric_columns=numeric_columns,
             inferred_target=inferred_target,
             inferred_predictors=inferred_predictors,
-            id_candidates=id_candidates,
         ), 500
 
     payload = json.loads(json_path.read_text(encoding="utf-8"))

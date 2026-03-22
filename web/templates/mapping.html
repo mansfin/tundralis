@@ -18,65 +18,127 @@
 
         <div class="card inner">
           <h2>Outcome</h2>
-          <select name="target_column" required>
-            {% for col in numeric_columns %}
-            <option value="{{ col }}" {% if col == inferred_target %}selected{% endif %}>{{ col }}</option>
-            {% endfor %}
-          </select>
-          <input type="text" name="display_name__{{ inferred_target }}" placeholder="Outcome display name in report" value="{{ inferred_target.replace('_', ' ').title() if inferred_target else '' }}">
+          <div class="field-grid two">
+            <div>
+              <label class="field-label">Column name</label>
+              <select name="target_column" required>
+                {% for col in numeric_columns %}
+                <option value="{{ col }}" {% if col == inferred_target %}selected{% endif %}>{{ col }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label class="field-label">Display name in report</label>
+              <input type="text" name="display_name__{{ inferred_target }}" placeholder="Optional display label" value="{{ inferred_target if inferred_target else '' }}">
+            </div>
+          </div>
         </div>
 
         <div class="card inner">
-          <div class="section-head">
+          <div class="section-head block">
             <div>
-              <h2>Predictors</h2>
-              <p class="sub small">Select only the columns you want included in the model.</p>
+              <h2>Predictor package</h2>
+              <p class="sub small">Build the set of predictors you want included in the KDA.</p>
             </div>
           </div>
-          <div class="predictor-grid">
-            {% for col in numeric_columns %}
-            {% if col != inferred_target %}
-            <div class="predictor-row">
-              <label class="predictor-main">
-                <input type="checkbox" name="predictor_columns" value="{{ col }}" {% if col in inferred_predictors %}checked{% endif %}>
-                <span class="mono">{{ col }}</span>
-              </label>
-              <input type="text" name="display_name__{{ col }}" placeholder="Display name in report" value="{{ col.replace('_', ' ').title() }}">
+
+          <div class="field-grid two predictor-package-layout">
+            <div>
+              <label class="field-label">Available numeric columns</label>
+              <div class="picker-card">
+                <input type="text" id="predictorSearch" class="search-input" placeholder="Filter columns...">
+                <div class="picker-list" id="predictorPicker">
+                  {% for col in numeric_columns %}
+                  {% if col != inferred_target %}
+                  <label class="picker-item" data-col="{{ col|lower }}">
+                    <input type="checkbox" name="predictor_columns" value="{{ col }}" {% if col in inferred_predictors %}checked{% endif %}>
+                    <span class="mono">{{ col }}</span>
+                  </label>
+                  {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
             </div>
-            {% endif %}
-            {% endfor %}
+
+            <div>
+              <label class="field-label">Selected predictor package</label>
+              <div class="selected-package" id="selectedPredictorPackage">
+                {% for col in numeric_columns %}
+                {% if col != inferred_target %}
+                <div class="selected-item {% if col not in inferred_predictors %}hidden{% endif %}" data-selected-item="{{ col }}">
+                  <div class="selected-item-head">
+                    <span class="mono">{{ col }}</span>
+                  </div>
+                  <label class="field-label small">Display name in report</label>
+                  <input type="text" name="display_name__{{ col }}" placeholder="Optional display label" value="{{ col }}">
+                </div>
+                {% endif %}
+                {% endfor %}
+                <div class="empty-state" id="predictorEmptyState">No predictors selected yet.</div>
+              </div>
+            </div>
           </div>
         </div>
 
-        <details class="card inner advanced">
-          <summary>Advanced metadata</summary>
-
-          <h2>Respondent ID (optional)</h2>
-          <select name="respondent_id_column">
-            <option value="">None</option>
-            {% for col in id_candidates %}
-            <option value="{{ col }}">{{ col }}</option>
-            {% endfor %}
-          </select>
-
+        <div class="card inner">
           <h2>Segments</h2>
-          <div class="checklist compact">
-            {% for col in columns %}
-            <label><input type="checkbox" name="segment_columns" value="{{ col }}"> {{ col }}</label>
-            {% endfor %}
+          <p class="sub small">Core functionality. Pick variables to use for segment definitions now; builder UI comes next.</p>
+          <div class="picker-card">
+            <div class="picker-list compact">
+              {% for col in columns %}
+              <label class="picker-item">
+                <input type="checkbox" name="segment_columns" value="{{ col }}"> <span class="mono">{{ col }}</span>
+              </label>
+              {% endfor %}
+            </div>
           </div>
-
-          <h2>Exclude from model</h2>
-          <div class="checklist compact">
-            {% for col in columns %}
-            <label><input type="checkbox" name="excluded_columns" value="{{ col }}"> {{ col }}</label>
-            {% endfor %}
+          <div class="segment-builder-note">
+            Next step: rule-based segment builder (AND/OR, equals, in-list, gt/lt, contains).
           </div>
-        </details>
+        </div>
 
         <div class="actions"><button type="submit">Run KDA</button></div>
       </form>
     </section>
   </main>
+  <script>
+    const searchInput = document.getElementById('predictorSearch');
+    const pickerItems = Array.from(document.querySelectorAll('.picker-item[data-col]'));
+    const selectedItems = Array.from(document.querySelectorAll('[data-selected-item]'));
+    const emptyState = document.getElementById('predictorEmptyState');
+
+    function refreshSelectedPackage() {
+      let visibleCount = 0;
+      pickerItems.forEach((item) => {
+        const checkbox = item.querySelector('input[type="checkbox"]');
+        const col = checkbox.value;
+        const selected = document.querySelector(`[data-selected-item="${col}"]`);
+        if (!selected) return;
+        if (checkbox.checked) {
+          selected.classList.remove('hidden');
+          visibleCount += 1;
+        } else {
+          selected.classList.add('hidden');
+        }
+      });
+      if (visibleCount === 0) emptyState.classList.remove('hidden');
+      else emptyState.classList.add('hidden');
+    }
+
+    pickerItems.forEach((item) => {
+      const checkbox = item.querySelector('input[type="checkbox"]');
+      checkbox.addEventListener('change', refreshSelectedPackage);
+    });
+
+    searchInput?.addEventListener('input', (e) => {
+      const q = e.target.value.toLowerCase().trim();
+      pickerItems.forEach((item) => {
+        const col = item.dataset.col || '';
+        item.classList.toggle('hidden', q && !col.includes(q));
+      });
+    });
+
+    refreshSelectedPackage();
+  </script>
 </body>
 </html>
