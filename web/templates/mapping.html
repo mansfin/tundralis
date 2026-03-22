@@ -16,146 +16,278 @@
         <input type="hidden" name="job_id" value="{{ job_id }}">
         <input type="hidden" name="filename" value="{{ filename }}">
         <input type="hidden" name="segment_definitions" id="segmentDefinitionsInput" value="[]">
+        <input type="hidden" name="recode_definitions" id="recodeDefinitionsInput" value="[]">
 
-        <div class="card inner">
-          <h2>Outcome</h2>
-          <div class="field-grid two">
-            <div>
-              <label class="field-label">Column name</label>
-              <select name="target_column" required>
-                {% for col in numeric_columns %}
-                <option value="{{ col }}" {% if col == inferred_target %}selected{% endif %}>{{ col }}</option>
-                {% endfor %}
-              </select>
-            </div>
-            <div>
-              <label class="field-label">Display name in report</label>
-              <input type="text" name="display_name__{{ inferred_target }}" placeholder="Optional display label" value="{{ inferred_target if inferred_target else '' }}">
-            </div>
-          </div>
-        </div>
-
-        <div class="card inner">
-          <div class="section-head block">
-            <div>
-              <h2>Predictor package</h2>
-              <p class="sub small">Start empty. Add the variables you actually want in the model.</p>
-            </div>
-          </div>
-
-          <div class="picker-toolbar">
-            <button type="button" class="button-link secondary js-select-all">Select all</button>
-            <button type="button" class="button-link secondary js-clear-all">Clear all</button>
-          </div>
-
-          <div class="field-grid two predictor-package-layout">
-            <div>
-              <label class="field-label">Available columns</label>
-              <div class="picker-card">
-                <input type="text" id="predictorSearch" class="search-input" placeholder="Filter columns...">
-                <div class="picker-list" id="predictorPicker">
-                  {% for item in predictor_candidates %}
-                  <label class="picker-item" data-col="{{ item.name|lower }}">
-                    <input type="checkbox" name="predictor_columns" value="{{ item.name }}">
-                    <span class="mono">{{ item.name }}</span>
-                    <span class="pill {{ item.kind }}">{{ item.kind }}</span>
-                  </label>
-                  {% endfor %}
+        <div class="inspector-layout">
+          <div class="mapping-main">
+            <div class="card inner">
+              <h2>Outcome</h2>
+              <div class="field-grid two">
+                <div>
+                  <label class="field-label">Column name</label>
+                  <select name="target_column" id="targetColumnSelect" required>
+                    {% for col in numeric_columns %}
+                    <option value="{{ col }}" {% if col == inferred_target %}selected{% endif %}>{{ col }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div>
+                  <label class="field-label">Display name in report</label>
+                  <input type="text" name="display_name__{{ inferred_target }}" placeholder="Optional display label" value="{{ inferred_target if inferred_target else '' }}">
                 </div>
               </div>
             </div>
 
-            <div>
-              <label class="field-label">Selected predictor package</label>
-              <div class="selected-package" id="selectedPredictorPackage">
-                {% for item in predictor_candidates %}
-                <div class="selected-item hidden" data-selected-item="{{ item.name }}">
-                  <div class="selected-item-head">
-                    <span class="mono">{{ item.name }}</span>
-                    <span class="pill {{ item.kind }}">{{ item.kind }}</span>
-                  </div>
-                  <label class="field-label small">Display name in report</label>
-                  <input type="text" name="display_name__{{ item.name }}" placeholder="Optional display label" value="{{ item.name }}">
-                  {% if item.kind != 'numeric' %}
-                  <div class="segment-builder-note">This column is non-numeric. Next step: recode or dummy-code it before modeling.</div>
-                  {% endif %}
-                </div>
-                {% endfor %}
-                <div class="empty-state" id="predictorEmptyState">No predictors selected yet.</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card inner">
-          <h2>Segments</h2>
-          <p class="sub small">Create named segments with simple rule groups.</p>
-
-          <div class="field-grid two">
-            <div>
-              <label class="field-label">Available segment source columns</label>
-              <div class="picker-card">
-                <div class="picker-list compact">
-                  {% for col in columns %}
-                  <label class="picker-item">
-                    <input type="checkbox" name="segment_columns" value="{{ col }}"> <span class="mono">{{ col }}</span>
-                  </label>
-                  {% endfor %}
+            <div class="card inner">
+              <div class="section-head block">
+                <div>
+                  <h2>Predictor package</h2>
+                  <p class="sub small">Start empty. Add the variables you actually want in the model.</p>
                 </div>
               </div>
-            </div>
-            <div>
-              <label class="field-label">Segment builder</label>
-              <div class="picker-card">
-                <div class="field-grid two">
-                  <div>
-                    <label class="field-label small">Segment name</label>
-                    <input type="text" id="segmentName" placeholder="e.g. Enterprise accounts">
-                  </div>
-                  <div>
-                    <label class="field-label small">Logic</label>
-                    <select id="segmentLogic">
-                      <option value="AND">AND</option>
-                      <option value="OR">OR</option>
-                    </select>
+
+              <div class="picker-toolbar">
+                <button type="button" class="button-link secondary js-select-all">Select all</button>
+                <button type="button" class="button-link secondary js-clear-all">Clear all</button>
+              </div>
+
+              <div class="field-grid two predictor-package-layout">
+                <div>
+                  <label class="field-label">Available columns</label>
+                  <div class="picker-card">
+                    <input type="text" id="predictorSearch" class="search-input" placeholder="Filter columns...">
+                    <div class="picker-list" id="predictorPicker">
+                      {% for item in predictor_candidates %}
+                      <label class="picker-item js-inspect-column" data-col="{{ item.name|lower }}" data-column-name="{{ item.name }}">
+                        <input type="checkbox" name="predictor_columns" value="{{ item.name }}">
+                        <span class="mono">{{ item.name }}</span>
+                        <span class="pill {{ item.kind }}">{{ item.kind }}</span>
+                      </label>
+                      {% endfor %}
+                    </div>
                   </div>
                 </div>
 
+                <div>
+                  <label class="field-label">Selected predictor package</label>
+                  <div class="selected-package" id="selectedPredictorPackage">
+                    {% for item in predictor_candidates %}
+                    <div class="selected-item hidden" data-selected-item="{{ item.name }}">
+                      <div class="selected-item-head">
+                        <span class="mono js-inspect-link" data-column-name="{{ item.name }}">{{ item.name }}</span>
+                        <span class="pill {{ item.kind }}">{{ item.kind }}</span>
+                      </div>
+                      <label class="field-label small">Display name in report</label>
+                      <input type="text" name="display_name__{{ item.name }}" placeholder="Optional display label" value="{{ item.name }}">
+                      {% if item.kind != 'numeric' %}
+                      <div class="segment-builder-note">This column is non-numeric. Next step: recode or dummy-code it before modeling.</div>
+                      {% endif %}
+                    </div>
+                    {% endfor %}
+                    <div class="empty-state" id="predictorEmptyState">No predictors selected yet.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card inner">
+              <h2>Recode studio</h2>
+              <p class="sub small">Build lightweight runtime transforms on top of the uploaded file. These create new derived columns for this run.</p>
+
+              <div class="picker-card">
                 <div class="field-grid three">
                   <div>
-                    <label class="field-label small">Column</label>
-                    <select id="segmentRuleColumn">
+                    <label class="field-label small">Transform type</label>
+                    <select id="recodeType">
+                      <option value="map_values">Map values</option>
+                      <option value="bucket_numeric">Bucket numeric</option>
+                      <option value="boolean_flag">Boolean flag</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="field-label small">Source column</label>
+                    <select id="recodeSourceColumn">
                       {% for col in columns %}
                       <option value="{{ col }}">{{ col }}</option>
                       {% endfor %}
                     </select>
                   </div>
                   <div>
-                    <label class="field-label small">Operator</label>
-                    <select id="segmentRuleOperator">
-                      <option value="equals">equals</option>
-                      <option value="in">in list</option>
-                      <option value="gt">&gt;</option>
-                      <option value="lt">&lt;</option>
-                      <option value="contains">contains</option>
-                    </select>
+                    <label class="field-label small">New column name</label>
+                    <input type="text" id="recodeOutputColumn" placeholder="e.g. region_tier or enterprise_flag">
                   </div>
-                  <div>
-                    <label class="field-label small">Value</label>
-                    <input type="text" id="segmentRuleValue" placeholder="e.g. Enterprise or 7">
+                </div>
+
+                <div class="recode-builder-stack">
+                  <div id="recodeMapValuesPanel" class="recode-panel">
+                    <label class="field-label small">Value mapping</label>
+                    <div class="field-grid three">
+                      <div>
+                        <input type="text" id="mapFromValue" placeholder="From value">
+                      </div>
+                      <div>
+                        <input type="text" id="mapToValue" placeholder="To value">
+                      </div>
+                      <div>
+                        <button type="button" class="button-link secondary" id="addMapRule">Add mapping row</button>
+                      </div>
+                    </div>
+                    <div class="selected-package" id="mapRuleDraft"></div>
+                  </div>
+
+                  <div id="recodeBucketPanel" class="recode-panel hidden">
+                    <label class="field-label small">Numeric buckets</label>
+                    <div class="field-grid four">
+                      <div><input type="text" id="bucketMin" placeholder="Min"></div>
+                      <div><input type="text" id="bucketMax" placeholder="Max"></div>
+                      <div><input type="text" id="bucketLabel" placeholder="Label"></div>
+                      <div><button type="button" class="button-link secondary" id="addBucketRule">Add bucket</button></div>
+                    </div>
+                    <div class="selected-package" id="bucketRuleDraft"></div>
+                  </div>
+
+                  <div id="recodeFlagPanel" class="recode-panel hidden">
+                    <label class="field-label small">Boolean flag rule</label>
+                    <div class="field-grid four">
+                      <div>
+                        <select id="flagOperator">
+                          <option value="equals">equals</option>
+                          <option value="not_equals">not equals</option>
+                          <option value="contains">contains</option>
+                          <option value="in">in list</option>
+                          <option value="gt">&gt;</option>
+                          <option value="gte">&gt;=</option>
+                          <option value="lt">&lt;</option>
+                          <option value="lte">&lt;=</option>
+                        </select>
+                      </div>
+                      <div><input type="text" id="flagValue" placeholder="Match value or list a|b|c"></div>
+                      <div><input type="text" id="flagTrueValue" placeholder="True value (default true)"></div>
+                      <div><input type="text" id="flagFalseValue" placeholder="False value (default false)"></div>
+                    </div>
                   </div>
                 </div>
 
                 <div class="picker-toolbar">
-                  <button type="button" class="button-link secondary" id="addSegmentRule">Add rule</button>
-                  <button type="button" class="button-link secondary" id="saveSegmentDefinition">Save segment</button>
+                  <button type="button" class="button-link secondary" id="saveRecodeDefinition">Save transform</button>
                 </div>
 
-                <div class="selected-package" id="segmentRuleDraft"></div>
-                <div class="selected-package" id="savedSegments"></div>
+                <div class="selected-package" id="savedRecodes"></div>
+              </div>
+            </div>
+
+            <div class="card inner">
+              <h2>Segments</h2>
+              <p class="sub small">Create named segments with simple rule groups.</p>
+
+              <div class="field-grid two">
+                <div>
+                  <label class="field-label">Available segment source columns</label>
+                  <div class="picker-card">
+                    <div class="picker-list compact">
+                      {% for col in columns %}
+                      <label class="picker-item js-inspect-column" data-column-name="{{ col }}">
+                        <input type="checkbox" name="segment_columns" value="{{ col }}"> <span class="mono">{{ col }}</span>
+                      </label>
+                      {% endfor %}
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label class="field-label">Segment builder</label>
+                  <div class="picker-card">
+                    <div class="field-grid two">
+                      <div>
+                        <label class="field-label small">Segment name</label>
+                        <input type="text" id="segmentName" placeholder="e.g. Enterprise accounts">
+                      </div>
+                      <div>
+                        <label class="field-label small">Logic</label>
+                        <select id="segmentLogic">
+                          <option value="AND">AND</option>
+                          <option value="OR">OR</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div class="field-grid three">
+                      <div>
+                        <label class="field-label small">Column</label>
+                        <select id="segmentRuleColumn">
+                          {% for col in columns %}
+                          <option value="{{ col }}">{{ col }}</option>
+                          {% endfor %}
+                        </select>
+                      </div>
+                      <div>
+                        <label class="field-label small">Operator</label>
+                        <select id="segmentRuleOperator">
+                          <option value="equals">equals</option>
+                          <option value="in">in list</option>
+                          <option value="gt">&gt;</option>
+                          <option value="lt">&lt;</option>
+                          <option value="contains">contains</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="field-label small">Value</label>
+                        <input type="text" id="segmentRuleValue" placeholder="e.g. Enterprise or 7">
+                      </div>
+                    </div>
+
+                    <div class="picker-toolbar">
+                      <button type="button" class="button-link secondary" id="addSegmentRule">Add rule</button>
+                      <button type="button" class="button-link secondary" id="saveSegmentDefinition">Save segment</button>
+                    </div>
+
+                    <div class="selected-package" id="segmentRuleDraft"></div>
+                    <div class="selected-package" id="savedSegments"></div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
+
+          <aside class="card inner inspector-panel">
+            <div class="section-head block">
+              <div>
+                <h2>Column inspector</h2>
+                <p class="sub small">Click any column name or choose one here.</p>
+              </div>
+            </div>
+
+            <div>
+              <label class="field-label">Inspect column</label>
+              <select id="inspectorColumnSelect">
+                {% for col in columns %}
+                <option value="{{ col }}" {% if col == inferred_target %}selected{% endif %}>{{ col }}</option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <div class="selected-item inspector-summary">
+              <div class="selected-item-head">
+                <span class="mono" id="inspectorColumnName">—</span>
+                <span class="pill" id="inspectorTypePill">—</span>
+              </div>
+              <div class="metric-grid">
+                <div class="metric-card"><span>Non-null</span><strong id="inspectorNonNull">—</strong></div>
+                <div class="metric-card"><span>Missing</span><strong id="inspectorMissingPct">—</strong></div>
+                <div class="metric-card"><span>Distinct</span><strong id="inspectorDistinct">—</strong></div>
+              </div>
+              <div id="inspectorNumericSummary" class="inspector-block hidden"></div>
+            </div>
+
+            <div class="selected-item">
+              <label class="field-label">Warnings</label>
+              <div id="inspectorWarnings" class="warning-list"></div>
+            </div>
+
+            <div class="selected-item">
+              <label class="field-label">Top values</label>
+              <div id="inspectorTopValues"></div>
+            </div>
+          </aside>
         </div>
 
         <div class="actions"><button type="submit">Run KDA</button></div>
@@ -163,10 +295,12 @@
     </section>
   </main>
   <script>
+    const columnProfiles = {{ column_profiles | tojson }};
     const searchInput = document.getElementById('predictorSearch');
     const pickerItems = Array.from(document.querySelectorAll('.picker-item[data-col]'));
     const emptyState = document.getElementById('predictorEmptyState');
     const segmentDefinitionsInput = document.getElementById('segmentDefinitionsInput');
+    const recodeDefinitionsInput = document.getElementById('recodeDefinitionsInput');
     const segmentRuleDraft = document.getElementById('segmentRuleDraft');
     const savedSegments = document.getElementById('savedSegments');
     const segmentName = document.getElementById('segmentName');
@@ -174,8 +308,28 @@
     const segmentRuleColumn = document.getElementById('segmentRuleColumn');
     const segmentRuleOperator = document.getElementById('segmentRuleOperator');
     const segmentRuleValue = document.getElementById('segmentRuleValue');
+    const inspectorColumnSelect = document.getElementById('inspectorColumnSelect');
+    const targetColumnSelect = document.getElementById('targetColumnSelect');
+    const recodeType = document.getElementById('recodeType');
+    const recodeSourceColumn = document.getElementById('recodeSourceColumn');
+    const recodeOutputColumn = document.getElementById('recodeOutputColumn');
+    const mapFromValue = document.getElementById('mapFromValue');
+    const mapToValue = document.getElementById('mapToValue');
+    const mapRuleDraft = document.getElementById('mapRuleDraft');
+    const bucketMin = document.getElementById('bucketMin');
+    const bucketMax = document.getElementById('bucketMax');
+    const bucketLabel = document.getElementById('bucketLabel');
+    const bucketRuleDraft = document.getElementById('bucketRuleDraft');
+    const flagOperator = document.getElementById('flagOperator');
+    const flagValue = document.getElementById('flagValue');
+    const flagTrueValue = document.getElementById('flagTrueValue');
+    const flagFalseValue = document.getElementById('flagFalseValue');
+    const savedRecodes = document.getElementById('savedRecodes');
     let draftRules = [];
     let savedSegmentDefs = [];
+    let savedRecodesState = [];
+    let draftMapRules = [];
+    let draftBucketRules = [];
 
     function refreshSelectedPackage() {
       let visibleCount = 0;
@@ -227,8 +381,143 @@
       });
     }
 
+    function renderMapDraft() {
+      mapRuleDraft.innerHTML = draftMapRules.length ? '<div class="empty-state compact">No mapping rows yet.</div>' : '';
+      draftMapRules.forEach((rule, idx) => {
+        const el = document.createElement('div');
+        el.className = 'selected-item';
+        el.innerHTML = `<div class="selected-item-head"><span>${rule.from} → ${rule.to}</span><button type="button" class="button-link secondary" data-remove-map="${idx}">Remove</button></div>`;
+        mapRuleDraft.appendChild(el);
+      });
+      document.querySelectorAll('[data-remove-map]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          draftMapRules.splice(Number(btn.dataset.removeMap), 1);
+          renderMapDraft();
+        });
+      });
+    }
+
+    function renderBucketDraft() {
+      bucketRuleDraft.innerHTML = draftBucketRules.length ? '<div class="empty-state compact">No bucket rows yet.</div>' : '';
+      draftBucketRules.forEach((rule, idx) => {
+        const minLabel = rule.min === '' ? '-∞' : rule.min;
+        const maxLabel = rule.max === '' ? '+∞' : rule.max;
+        const el = document.createElement('div');
+        el.className = 'selected-item';
+        el.innerHTML = `<div class="selected-item-head"><span>${rule.label}: ${minLabel} to ${maxLabel}</span><button type="button" class="button-link secondary" data-remove-bucket="${idx}">Remove</button></div>`;
+        bucketRuleDraft.appendChild(el);
+      });
+      document.querySelectorAll('[data-remove-bucket]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          draftBucketRules.splice(Number(btn.dataset.removeBucket), 1);
+          renderBucketDraft();
+        });
+      });
+    }
+
+    function renderSavedRecodes() {
+      savedRecodes.innerHTML = savedRecodesState.length ? '' : '<div class="empty-state">No saved transforms yet.</div>';
+      savedRecodesState.forEach((recode, idx) => {
+        const el = document.createElement('div');
+        el.className = 'selected-item';
+        let detail = '';
+        if (recode.type === 'map_values') {
+          detail = Object.entries(recode.mapping || {}).map(([k, v]) => `${k} → ${v}`).join('<br>');
+        } else if (recode.type === 'bucket_numeric') {
+          detail = (recode.bins || []).map((b) => `${b.label}: ${b.min ?? '-∞'} to ${b.max ?? '+∞'}`).join('<br>');
+        } else {
+          detail = `${recode.operator} ${recode.value} → ${String(recode.true_value)} / ${String(recode.false_value)}`;
+        }
+        el.innerHTML = `<div class="selected-item-head"><span>${recode.output_column} ← ${recode.source_column} <span class="pill categorical">${recode.type}</span></span><button type="button" class="button-link secondary" data-remove-recode="${idx}">Remove</button></div><div>${detail}</div>`;
+        savedRecodes.appendChild(el);
+      });
+      document.querySelectorAll('[data-remove-recode]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          savedRecodesState.splice(Number(btn.dataset.removeRecode), 1);
+          recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+          renderSavedRecodes();
+        });
+      });
+    }
+
+    function setRecodePanel(type) {
+      document.getElementById('recodeMapValuesPanel').classList.toggle('hidden', type !== 'map_values');
+      document.getElementById('recodeBucketPanel').classList.toggle('hidden', type !== 'bucket_numeric');
+      document.getElementById('recodeFlagPanel').classList.toggle('hidden', type !== 'boolean_flag');
+      renderInspector(recodeSourceColumn.value);
+    }
+
+    function warningLabel(warning) {
+      return warning
+        .replaceAll('_', ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+
+    function renderInspector(columnName) {
+      const profile = columnProfiles[columnName];
+      if (!profile) return;
+      document.getElementById('inspectorColumnName').textContent = profile.column;
+      const typePill = document.getElementById('inspectorTypePill');
+      typePill.textContent = profile.inferred_type;
+      typePill.className = `pill ${profile.inferred_type.includes('numeric') ? 'numeric' : 'categorical'}`;
+      document.getElementById('inspectorNonNull').textContent = profile.non_null_count;
+      document.getElementById('inspectorMissingPct').textContent = `${profile.missing_pct}%`;
+      document.getElementById('inspectorDistinct').textContent = profile.distinct_count;
+
+      const numericSummary = document.getElementById('inspectorNumericSummary');
+      if (profile.numeric_summary) {
+        numericSummary.classList.remove('hidden');
+        numericSummary.innerHTML = `
+          <div class="metric-grid compact">
+            <div class="metric-card"><span>Min</span><strong>${profile.numeric_summary.min}</strong></div>
+            <div class="metric-card"><span>Max</span><strong>${profile.numeric_summary.max}</strong></div>
+            <div class="metric-card"><span>Mean</span><strong>${profile.numeric_summary.mean}</strong></div>
+            <div class="metric-card"><span>Median</span><strong>${profile.numeric_summary.median}</strong></div>
+          </div>
+        `;
+      } else {
+        numericSummary.classList.add('hidden');
+        numericSummary.innerHTML = '';
+      }
+
+      const warnings = document.getElementById('inspectorWarnings');
+      warnings.innerHTML = '';
+      if ((profile.warnings || []).length === 0) {
+        warnings.innerHTML = '<div class="empty-state compact">No warnings.</div>';
+      } else {
+        profile.warnings.forEach((warning) => {
+          const pill = document.createElement('span');
+          pill.className = 'warning-pill';
+          pill.textContent = warningLabel(warning);
+          warnings.appendChild(pill);
+        });
+      }
+
+      const topValues = document.getElementById('inspectorTopValues');
+      if ((profile.top_values || []).length === 0) {
+        topValues.innerHTML = '<div class="empty-state compact">No non-null values to preview.</div>';
+      } else {
+        topValues.innerHTML = `
+          <table class="value-table">
+            <thead><tr><th>Value</th><th>Count</th><th>%</th></tr></thead>
+            <tbody>
+              ${profile.top_values.map((row) => `<tr><td>${row.value}</td><td>${row.count}</td><td>${row.pct}%</td></tr>`).join('')}
+            </tbody>
+          </table>
+        `;
+      }
+
+      if (inspectorColumnSelect.value !== columnName) {
+        inspectorColumnSelect.value = columnName;
+      }
+    }
+
     pickerItems.forEach((item) => {
       item.querySelector('input[type="checkbox"]').addEventListener('change', refreshSelectedPackage);
+    });
+
+    document.querySelectorAll('.js-inspect-column, .js-inspect-link').forEach((el) => {
+      el.addEventListener('click', () => renderInspector(el.dataset.columnName));
     });
 
     document.querySelector('.js-select-all')?.addEventListener('click', () => {
@@ -249,12 +538,73 @@
       });
     });
 
+    document.getElementById('addMapRule')?.addEventListener('click', () => {
+      const from = mapFromValue.value.trim();
+      const to = mapToValue.value.trim();
+      if (!from || !to) return;
+      draftMapRules.push({ from, to });
+      mapFromValue.value = '';
+      mapToValue.value = '';
+      renderMapDraft();
+    });
+
+    document.getElementById('addBucketRule')?.addEventListener('click', () => {
+      const label = bucketLabel.value.trim();
+      if (!label) return;
+      draftBucketRules.push({ min: bucketMin.value.trim(), max: bucketMax.value.trim(), label });
+      bucketMin.value = '';
+      bucketMax.value = '';
+      bucketLabel.value = '';
+      renderBucketDraft();
+    });
+
+    document.getElementById('saveRecodeDefinition')?.addEventListener('click', () => {
+      const type = recodeType.value;
+      const source_column = recodeSourceColumn.value;
+      const output_column = recodeOutputColumn.value.trim();
+      if (!output_column) return;
+
+      let payload = { type, source_column, output_column };
+      if (type === 'map_values') {
+        if (draftMapRules.length === 0) return;
+        payload.mapping = Object.fromEntries(draftMapRules.map((row) => [row.from, row.to]));
+      } else if (type === 'bucket_numeric') {
+        if (draftBucketRules.length === 0) return;
+        payload.bins = draftBucketRules.map((row) => ({
+          min: row.min === '' ? null : Number(row.min),
+          max: row.max === '' ? null : Number(row.max),
+          label: row.label,
+          include_min: true,
+          include_max: true,
+        }));
+      } else {
+        if (!flagValue.value.trim()) return;
+        payload.operator = flagOperator.value;
+        payload.value = flagValue.value.trim();
+        payload.true_value = flagTrueValue.value.trim() || true;
+        payload.false_value = flagFalseValue.value.trim() || false;
+      }
+
+      savedRecodesState.push(payload);
+      recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+      recodeOutputColumn.value = '';
+      flagValue.value = '';
+      flagTrueValue.value = '';
+      flagFalseValue.value = '';
+      draftMapRules = [];
+      draftBucketRules = [];
+      renderMapDraft();
+      renderBucketDraft();
+      renderSavedRecodes();
+    });
+
     document.getElementById('addSegmentRule')?.addEventListener('click', () => {
       const value = segmentRuleValue.value.trim();
       if (!value) return;
       draftRules.push({ column: segmentRuleColumn.value, operator: segmentRuleOperator.value, value });
       segmentRuleValue.value = '';
       renderDraftRules();
+      renderInspector(segmentRuleColumn.value);
     });
 
     document.getElementById('saveSegmentDefinition')?.addEventListener('click', () => {
@@ -268,9 +618,20 @@
       renderSavedSegments();
     });
 
+    recodeType?.addEventListener('change', (e) => setRecodePanel(e.target.value));
+    recodeSourceColumn?.addEventListener('change', (e) => renderInspector(e.target.value));
+    inspectorColumnSelect?.addEventListener('change', (e) => renderInspector(e.target.value));
+    targetColumnSelect?.addEventListener('change', (e) => renderInspector(e.target.value));
+    segmentRuleColumn?.addEventListener('change', (e) => renderInspector(e.target.value));
+
     refreshSelectedPackage();
     renderDraftRules();
     renderSavedSegments();
+    renderMapDraft();
+    renderBucketDraft();
+    renderSavedRecodes();
+    setRecodePanel(recodeType.value);
+    renderInspector(inspectorColumnSelect.value || targetColumnSelect.value);
   </script>
 </body>
 </html>

@@ -33,6 +33,7 @@ from tundralis.ingestion import (
 from tundralis.analysis import run_kda
 from tundralis.narratives import NarrativeEngine
 from tundralis.payload import build_analysis_run_payload
+from tundralis.transforms import apply_recode_transforms
 from tundralis.charts import (
     chart_importance_bar,
     chart_quadrant,
@@ -88,9 +89,11 @@ def main(argv=None):
     logger = logging.getLogger(__name__)
 
     logger.info("Loading data from: %s", args.data)
-    df = load_survey_data(args.data)
+    raw_df = load_survey_data(args.data)
 
     mapping = load_mapping_config(args.mapping_config)
+    recode_definitions = mapping.get("recode_definitions", [])
+    df = apply_recode_transforms(raw_df, recode_definitions)
     config = resolve_config(df, args, mapping)
     validate_resolved_config(df, config)
     validation_summary = build_validation_summary(df, config)
@@ -148,6 +151,7 @@ def main(argv=None):
     payload["run_info"]["version"] = __version__
     payload["input_summary"]["weight_column"] = config.weight_column
     payload["input_summary"]["segment_columns"] = config.segment_columns or []
+    payload["input_summary"]["recode_definitions"] = recode_definitions
 
     builder = PayloadReportBuilder(payload, charts)
     builder.build()

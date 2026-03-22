@@ -35,6 +35,7 @@ def build_analysis_run_payload(
     missingness_summary: dict,
     driver_usable_n: dict[str, int],
     recommendations: list[str] | None = None,
+    display_name_map: dict[str, str] | None = None,
 ) -> dict:
     recommendations = recommendations or []
     display_name_map = display_name_map or {}
@@ -120,7 +121,7 @@ def build_analysis_run_payload(
 
         drivers.append({
             "driver_id": predictor,
-            "driver_label": human_label(predictor),
+            "driver_label": display_name_map.get(predictor, human_label(predictor)),
             "performance": {
                 "mean": round(perf_mean, 4),
                 "std_dev": round(perf_std, 4),
@@ -195,7 +196,7 @@ def build_analysis_run_payload(
         },
         "outcome": {
             "name": target_column,
-            "label": human_label(target_column),
+            "label": display_name_map.get(target_column, human_label(target_column)),
             "scale": {"min": outcome_min, "max": outcome_max},
             "summary": {
                 "mean": round(outcome_mean, 4),
@@ -258,5 +259,3 @@ def build_analysis_run_payload(
         },
         "recommendations": recs,
     }
-  }
-}

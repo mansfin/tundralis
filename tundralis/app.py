@@ -13,6 +13,8 @@ from flask import Flask, Response, abort, render_template, request, send_from_di
 from tundralis.analysis import run_kda
 from tundralis.charts import chart_importance_bar, chart_model_fit, chart_quadrant
 from tundralis.ingestion import infer_predictors, load_mapping_config, resolve_config, validate_resolved_config
+from tundralis.profiling import profile_dataframe
+from tundralis.transforms import apply_recode_transforms
 from tundralis.utils import load_survey_data, prepare_sparse_model_data
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -133,6 +135,7 @@ def inspect_file():
     numeric_columns = df.select_dtypes(include="number").columns.tolist()
     inferred_target = _detect_target(columns, numeric_columns)
     inferred_predictors = _suggested_predictors(df, inferred_target)
+    column_profiles = profile_dataframe(df)
 
     return render_template(
         "mapping.html",
@@ -143,6 +146,7 @@ def inspect_file():
         inferred_target=inferred_target,
         inferred_predictors=inferred_predictors,
         predictor_candidates=_predictor_candidates(df, inferred_target),
+        column_profiles=column_profiles,
     )
 
 
@@ -170,10 +174,17 @@ def run_job():
     except json.JSONDecodeError:
         segment_definitions = []
 
+    recode_definitions_raw = request.form.get("recode_definitions")
+    try:
+        recode_definitions = json.loads(recode_definitions_raw) if recode_definitions_raw else []
+    except json.JSONDecodeError:
+        recode_definitions = []
+
     mapping = {
         "target_column": target_column,
         "segment_columns": segment_columns,
         "segment_definitions": segment_definitions,
+        "recode_definitions": recode_definitions,
         "predictor_columns": predictors,
         "display_name_map": display_name_map,
     }
@@ -201,6 +212,7 @@ def run_job():
         numeric_columns = df.select_dtypes(include="number").columns.tolist()
         inferred_target = _detect_target(columns, numeric_columns)
         inferred_predictors = _suggested_predictors(df, inferred_target)
+        column_profiles = profile_dataframe(df)
         return render_template(
             "mapping.html",
             error=result.stderr or result.stdout or "Run failed.",
@@ -211,10 +223,12 @@ def run_job():
             inferred_target=inferred_target,
             inferred_predictors=inferred_predictors,
             predictor_candidates=_predictor_candidates(df, inferred_target),
+            column_profiles=column_profiles,
         ), 500
 
     payload = json.loads(json_path.read_text(encoding="utf-8"))
     payload.setdefault("input_summary", {})["segment_definitions"] = segment_definitions
+    payload.setdefault("input_summary", {})["recode_definitions"] = recode_definitions
     json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     preview_images = _write_preview_charts(job_id, data_path, mapping_path)
     return render_template(
