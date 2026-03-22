@@ -17,11 +17,23 @@
         <div class="stat"><span>R²</span><strong>{{ '%.3f'|format(payload.model_diagnostics.r_squared) }}</strong></div>
       </div>
       <h2>Top priorities</h2>
+      {% set top_drivers = payload.drivers|sort(attribute='opportunity.rank') %}
       <ol>
-        {% for driver in payload.drivers|sort(attribute='opportunity.rank')[:5] %}
+        {% for driver in top_drivers[:5] %}
         <li><strong>{{ driver.driver_label }}</strong> — {{ driver.classification }} (opp {{ '%.2f'|format(driver.opportunity.score) }})</li>
         {% endfor %}
       </ol>
+
+      <h2>Preview charts</h2>
+      <div class="preview-grid">
+        {% for image in preview_images %}
+        <div class="preview-card">
+          <img src="/artifacts/{{ job_id }}/{{ image }}" alt="{{ image }}">
+          <div class="preview-label">{{ image }}</div>
+        </div>
+        {% endfor %}
+      </div>
+
       <div class="actions">
         <a class="button-link" href="/artifacts/{{ job_id }}/report.pptx">Download PPTX</a>
         <a class="button-link secondary" href="/artifacts/{{ job_id }}/analysis_run.json">Download JSON</a>
