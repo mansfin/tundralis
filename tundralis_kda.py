@@ -17,9 +17,18 @@ import logging
 import sys
 from pathlib import Path
 
-from tundralis.utils import setup_logging, load_survey_data, validate_columns, prepare_data, output_path
+from tundralis import __version__
+from tundralis.utils import (
+    setup_logging,
+    load_survey_data,
+    validate_columns,
+    prepare_sparse_model_data,
+    output_path,
+    write_json,
+)
 from tundralis.analysis import run_kda
 from tundralis.narratives import NarrativeEngine
+from tundralis.payload import build_analysis_run_payload
 from tundralis.charts import (
     chart_importance_bar,
     chart_quadrant,
@@ -27,7 +36,7 @@ from tundralis.charts import (
     chart_model_fit,
     chart_driver_detail,
 )
-from tundralis.report import ReportBuilder
+from tundralis.payload_report import PayloadReportBuilder
 
 
 def parse_args(argv=None) -> argparse.Namespace:
@@ -51,6 +60,10 @@ def parse_args(argv=None) -> argparse.Namespace:
     parser.add_argument(
         "--output", default=None,
         help="Output .pptx file path (default: output/<target>_kda_report.pptx)",
+    )
+    parser.add_argument(
+        "--json-output", default=None,
+        help="Optional output path for analysis-run JSON (default: output/<target>_analysis_run.json)",
     )
     parser.add_argument(
         "--openai-model", default="gpt-4o",
@@ -98,12 +111,13 @@ def main(argv=None):
 
     # ── Validate ──────────────────────────────────────────────────────────────
     validate_columns(df, args.target, predictors)
-    X, y = prepare_data(df, args.target, predictors)
+    eligible_df, X, y, missingness_summary, driver_usable_n = prepare_sparse_model_data(df, args.target, predictors)
 
     logger.info("Analysis config:")
     logger.info("  Target     : %s", args.target)
     logger.info("  Predictors : %s", predictors)
-    logger.info("  N          : %d", len(y))
+    logger.info("  N modeled  : %d", len(y))
+    logger.info("  Eligible   : valid DV + at least one predictor")
 
     # ── Statistical analysis ──────────────────────────────────────────────────
     results = run_kda(X, y, target_name=args.target)
@@ -131,21 +145,41 @@ def main(argv=None):
     for pred in predictors:
         charts[f"driver_{pred}"] = chart_driver_detail(pred, results)
 
+    payload = build_analysis_run_payload(
+        results=results,
+        source_file=args.data,
+        input_df=df,
+        model_df=eligible_df,
+        target_column=args.target,
+        predictor_columns=predictors,
+        missingness_summary=missingness_summary,
+        driver_usable_n=driver_usable_n,
+        recommendations=recommendations,
+    )
+    payload["run_info"]["version"] = __version__
+
     # ── Build report ──────────────────────────────────────────────────────────
-    builder = ReportBuilder(results, engine, charts)
-    builder.build(exec_summary, recommendations, driver_insights)
+    builder = PayloadReportBuilder(payload, charts)
+    builder.build()
 
     # ── Save ──────────────────────────────────────────────────────────────────
+    safe_target = args.target.replace(" ", "_")
     if args.output:
         out_file = Path(args.output)
     else:
-        safe_target = args.target.replace(" ", "_")
         out_file = output_path("output", f"{safe_target}_kda_report.pptx")
 
+    if args.json_output:
+        json_file = Path(args.json_output)
+    else:
+        json_file = output_path("output", f"{safe_target}_analysis_run.json")
+
     saved = builder.save(out_file)
+    json_saved = write_json(json_file, payload)
     logger.info("")
     logger.info("━" * 60)
     logger.info("  ✓  Report saved: %s", saved.resolve())
+    logger.info("  ✓  JSON saved  : %s", json_saved.resolve())
     logger.info("  ✓  Slides: %d", len(builder.prs.slides))
     logger.info("  ✓  Model R²: %.3f", results.meta["r_squared"])
     logger.info("━" * 60)

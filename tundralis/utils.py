@@ -2,6 +2,7 @@
 
 import os
 import sys
+import json
 import logging
 from pathlib import Path
 from typing import Optional
@@ -82,6 +83,65 @@ def prepare_data(
     X = subset[predictors]
     y = subset[target]
     return X, y
+
+
+def prepare_sparse_model_data(
+    df: pd.DataFrame,
+    target: str,
+    predictors: list[str],
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, dict, dict[str, int]]:
+    """
+    Prepare sparse survey data for modeling.
+
+    Eligibility:
+    - target must be non-null
+    - at least one predictor must be non-null
+
+    Modeling strategy in v1:
+    - retain eligible respondents
+    - median-impute predictor values for model compatibility
+    - do not impute the target
+    - emit missingness metadata and driver-level usable N
+    """
+    cols = [target] + predictors
+    subset = df[cols].copy()
+
+    valid_dv = subset[target].notna()
+    any_predictor = subset[predictors].notna().any(axis=1)
+    eligible = subset.loc[valid_dv & any_predictor].copy()
+
+    if eligible.empty:
+        raise ValueError("No eligible respondents remain after requiring valid DV and at least one predictor.")
+
+    driver_usable_n = {col: int(eligible[[target, col]].dropna().shape[0]) for col in predictors}
+
+    missingness_summary = {
+        "by_variable": {
+            col: {
+                "missing_count": int(subset[col].isna().sum()),
+                "missing_rate": round(float(subset[col].isna().mean()), 4),
+            }
+            for col in cols
+        }
+    }
+
+    X_raw = eligible[predictors].copy()
+    X_model = X_raw.copy()
+    for col in predictors:
+        median = X_model[col].median()
+        if pd.isna(median):
+            raise ValueError(f"Predictor '{col}' has no usable values after eligibility filtering.")
+        X_model[col] = X_model[col].fillna(median)
+
+    y = eligible[target].copy()
+    return eligible, X_model, y, missingness_summary, driver_usable_n
+
+
+def write_json(path: str | Path, payload: dict) -> Path:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return p
 
 
 def standardize(df: pd.DataFrame) -> pd.DataFrame:
