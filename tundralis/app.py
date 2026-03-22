@@ -1,0 +1,129 @@
+from __future__ import annotations
+
+import json
+import subprocess
+import uuid
+from pathlib import Path
+
+from flask import Flask, render_template, request, redirect, url_for, send_from_directory, abort
+
+from tundralis.utils import load_survey_data
+from tundralis.ingestion import infer_predictors
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNTIME_DIR = ROOT / "app_runtime"
+UPLOAD_DIR = RUNTIME_DIR / "uploads"
+MAPPING_DIR = RUNTIME_DIR / "mappings"
+ARTIFACT_DIR = RUNTIME_DIR / "artifacts"
+for p in [UPLOAD_DIR, MAPPING_DIR, ARTIFACT_DIR]:
+    p.mkdir(parents=True, exist_ok=True)
+
+app = Flask(__name__, template_folder=str(ROOT / "web" / "templates"), static_folder=str(ROOT / "web" / "static"))
+
+
+def _job_dir(job_id: str) -> Path:
+    p = ARTIFACT_DIR / job_id
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+@app.get("/")
+def index():
+    return render_template("index.html")
+
+
+@app.post("/inspect")
+def inspect_file():
+    f = request.files.get("survey_file")
+    if not f or not f.filename:
+        return render_template("index.html", error="Upload a CSV first."), 400
+
+    job_id = uuid.uuid4().hex[:12]
+    upload_path = UPLOAD_DIR / f"{job_id}_{Path(f.filename).name}"
+    f.save(upload_path)
+
+    df = load_survey_data(upload_path)
+    columns = list(df.columns)
+    numeric_columns = df.select_dtypes(include="number").columns.tolist()
+    target_candidates = [
+        "overall_satisfaction",
+        "overall_sat",
+        "overall",
+        "nps",
+        "likelihood_to_recommend",
+    ]
+    inferred_target = next((c for c in target_candidates if c in columns), None)
+    if inferred_target is None and numeric_columns:
+        inferred_target = next((c for c in numeric_columns if "overall" in c.lower() or "satisfaction" in c.lower()), numeric_columns[0])
+    inferred_predictors = infer_predictors(df, inferred_target) if numeric_columns and inferred_target else []
+
+    return render_template(
+        "mapping.html",
+        job_id=job_id,
+        filename=upload_path.name,
+        columns=columns,
+        numeric_columns=numeric_columns,
+        inferred_target=inferred_target,
+        inferred_predictors=inferred_predictors,
+    )
+
+
+@app.post("/run")
+def run_job():
+    job_id = request.form.get("job_id") or uuid.uuid4().hex[:12]
+    filename = request.form.get("filename")
+    if not filename:
+        abort(400)
+
+    data_path = UPLOAD_DIR / filename
+    predictors = request.form.getlist("predictor_columns")
+    target_column = request.form.get("target_column")
+    respondent_id_column = request.form.get("respondent_id_column") or None
+    segment_columns = request.form.getlist("segment_columns")
+    excluded_columns = request.form.getlist("excluded_columns")
+
+    mapping = {
+        "target_column": target_column,
+        "respondent_id_column": respondent_id_column,
+        "segment_columns": segment_columns,
+        "excluded_columns": excluded_columns,
+        "predictor_columns": predictors,
+    }
+    mapping_path = MAPPING_DIR / f"{job_id}.json"
+    mapping_path.write_text(json.dumps(mapping, indent=2), encoding="utf-8")
+
+    job_dir = _job_dir(job_id)
+    json_path = job_dir / "analysis_run.json"
+    pptx_path = job_dir / "report.pptx"
+
+    cmd = [
+        str(ROOT / ".venv" / "bin" / "python"),
+        str(ROOT / "tundralis_kda.py"),
+        "--data", str(data_path),
+        "--mapping-config", str(mapping_path),
+        "--no-ai",
+        "--json-output", str(json_path),
+        "--output", str(pptx_path),
+    ]
+    result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+
+    if result.returncode != 0:
+        return render_template("mapping.html", error=result.stderr or result.stdout or "Run failed.", job_id=job_id, filename=filename, columns=[], numeric_columns=[]), 500
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    return render_template(
+        "result.html",
+        job_id=job_id,
+        filename=filename,
+        payload=payload,
+        logs=result.stdout,
+    )
+
+
+@app.get("/artifacts/<job_id>/<path:name>")
+def artifacts(job_id: str, name: str):
+    return send_from_directory(_job_dir(job_id), name, as_attachment=True)
+
+
+if __name__ == "__main__":
+    app.run(host="127.0.0.1", port=7860, debug=False)
