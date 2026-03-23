@@ -12,14 +12,78 @@
       <h1>Upload a survey file</h1>
       <p class="sub">Thin golden path: upload CSV → review columns → run KDA → download deck + JSON.</p>
       {% if error %}<div class="error">{{ error }}</div>{% endif %}
-      <form action="/inspect" method="post" enctype="multipart/form-data" class="upload-form">
+      <form action="/inspect" method="post" enctype="multipart/form-data" class="upload-form" id="uploadForm">
         <label class="upload-box">
           <span>Choose CSV</span>
-          <input type="file" name="survey_file" accept=".csv" required>
+          <input type="file" name="survey_file" id="surveyFileInput" accept=".csv" required>
         </label>
-        <button type="submit">Inspect columns</button>
+        <div class="upload-action-row">
+          <button type="submit" id="inspectColumnsButton">Inspect columns</button>
+          <div class="upload-progress hidden" id="uploadProgressWrap" aria-live="polite">
+            <div class="upload-progress-bar">
+              <div class="upload-progress-fill" id="uploadProgressFill"></div>
+            </div>
+            <div class="upload-progress-label" id="uploadProgressLabel">Uploading… 0%</div>
+          </div>
+        </div>
       </form>
     </section>
   </main>
+  <script>
+    const uploadForm = document.getElementById('uploadForm');
+    const surveyFileInput = document.getElementById('surveyFileInput');
+    const inspectColumnsButton = document.getElementById('inspectColumnsButton');
+    const uploadProgressWrap = document.getElementById('uploadProgressWrap');
+    const uploadProgressFill = document.getElementById('uploadProgressFill');
+    const uploadProgressLabel = document.getElementById('uploadProgressLabel');
+
+    function setUploadProgress(percent, label) {
+      uploadProgressWrap.classList.remove('hidden');
+      uploadProgressFill.style.width = `${percent}%`;
+      uploadProgressLabel.textContent = label || `Uploading… ${percent}%`;
+    }
+
+    uploadForm?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      if (!surveyFileInput.files.length) {
+        surveyFileInput.reportValidity();
+        return;
+      }
+
+      const xhr = new XMLHttpRequest();
+      const formData = new FormData(uploadForm);
+      inspectColumnsButton.disabled = true;
+      setUploadProgress(0, 'Uploading… 0%');
+
+      xhr.upload.addEventListener('progress', (progressEvent) => {
+        if (!progressEvent.lengthComputable) {
+          setUploadProgress(35, 'Uploading file…');
+          return;
+        }
+        const percent = Math.max(1, Math.round((progressEvent.loaded / progressEvent.total) * 100));
+        setUploadProgress(percent, `Uploading… ${percent}%`);
+      });
+
+      xhr.addEventListener('load', () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          setUploadProgress(100, 'Opening review screen…');
+          document.open();
+          document.write(xhr.responseText);
+          document.close();
+          return;
+        }
+        inspectColumnsButton.disabled = false;
+        setUploadProgress(100, 'Upload finished, but the review screen failed to load.');
+      });
+
+      xhr.addEventListener('error', () => {
+        inspectColumnsButton.disabled = false;
+        setUploadProgress(100, 'Upload failed. Try again.');
+      });
+
+      xhr.open('POST', uploadForm.action, true);
+      xhr.send(formData);
+    });
+  </script>
 </body>
 </html>
