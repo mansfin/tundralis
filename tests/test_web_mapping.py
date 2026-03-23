@@ -48,6 +48,7 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn("Ready to run", html)
         self.assertIn("toggleInspectorButton", html)
         self.assertIn("segmentColumnSearch", html)
+        self.assertIn("launchRecodeBuilder", html)
         self.assertIn("inspectOutcomeButton", html)
         self.assertIn("Nested condition tree", html)
         self.assertIn("segmentTreeCanvas", html)

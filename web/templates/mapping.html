@@ -39,7 +39,7 @@
               </div>
 
               <div class="picker-card">
-                <div class="field-grid three">
+                <div class="recode-draft-row">
                   <div>
                     <label class="field-label small">Source column</label>
                     <select id="recodeSourceColumn"></select>
@@ -57,70 +57,18 @@
                     <label class="field-label small">New column name</label>
                     <input type="text" id="recodeOutputColumn" placeholder="e.g. region_tier or enterprise_flag" required>
                   </div>
-                </div>
-
-                <div class="selected-item recode-lock-card hidden" id="recodeLockCard">
-                  <div class="selected-item-head">
-                    <span>Locked transform output</span>
-                    <span class="pill categorical">editable</span>
+                  <div class="recode-draft-action">
+                    <label class="field-label small">Create</label>
+                    <button type="button" class="recode-add-button" id="launchRecodeBuilder" aria-label="Create transform">+</button>
                   </div>
-                  <button type="button" class="button-link secondary outcome-inspect-trigger mono" id="inspectRecodeOutputButton">—</button>
-                  <div class="picker-toolbar">
-                    <button type="button" class="button-link secondary" id="lockRecodeConfig">Lock transform setup</button>
-                    <button type="button" class="button-link secondary hidden" id="editRecodeConfig">Edit transform setup</button>
-                  </div>
-                </div>
-
-                <div class="recode-builder-stack hidden" id="recodeBuilderStack">
-                  <div id="recodeMapValuesPanel" class="recode-panel">
-                    <label class="field-label small">Value mapping</label>
-                    <div class="field-grid three">
-                      <div><input type="text" id="mapFromValue" placeholder="From value"></div>
-                      <div><input type="text" id="mapToValue" placeholder="To value"></div>
-                      <div><button type="button" class="button-link secondary" id="addMapRule">Add mapping row</button></div>
-                    </div>
-                    <div class="selected-package" id="mapRuleDraft"></div>
-                  </div>
-
-                  <div id="recodeBucketPanel" class="recode-panel hidden">
-                    <label class="field-label small">Numeric buckets</label>
-                    <div class="field-grid four">
-                      <div><input type="text" id="bucketMin" placeholder="Min"></div>
-                      <div><input type="text" id="bucketMax" placeholder="Max"></div>
-                      <div><input type="text" id="bucketLabel" placeholder="Label"></div>
-                      <div><button type="button" class="button-link secondary" id="addBucketRule">Add bucket</button></div>
-                    </div>
-                    <div class="selected-package" id="bucketRuleDraft"></div>
-                  </div>
-
-                  <div id="recodeFlagPanel" class="recode-panel hidden">
-                    <label class="field-label small">Boolean flag rule</label>
-                    <div class="field-grid three">
-                      <div>
-                        <select id="flagOperator">
-                          <option value="equals">equals</option>
-                          <option value="not_equals">not equals</option>
-                          <option value="contains">contains</option>
-                          <option value="in">in list</option>
-                          <option value="gt">&gt;</option>
-                          <option value="gte">&gt;=</option>
-                          <option value="lt">&lt;</option>
-                          <option value="lte">&lt;=</option>
-                        </select>
-                      </div>
-                      <div><input type="text" id="flagValue" placeholder="Match value or list a|b|c"></div>
-                      <div class="segment-builder-note">Always outputs 1 for match and 0 otherwise.</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div class="actions module-actions">
-                  <button type="button" class="button-link" id="saveRecodeDefinition">Save transform</button>
-                  <button type="button" class="button-link" id="goToModelTab">Continue to analysis setup</button>
                 </div>
 
                 <div id="recodeBuilderStatus" class="empty-state compact hidden"></div>
                 <div class="selected-package" id="savedRecodes"></div>
+
+                <div class="actions module-actions">
+                  <button type="button" class="button-link" id="goToModelTab">Continue to analysis setup</button>
+                </div>
               </div>
             </section>
 
@@ -371,7 +319,6 @@
     let savedRecodesState = [];
     let draftMapRules = [];
     let draftBucketRules = [];
-    let recodeConfigLocked = false;
 
     let segmentTreeState = createEmptyGroup('all');
 
@@ -529,11 +476,7 @@
     const targetDisplayNameContainer = document.getElementById('targetDisplayNameContainer');
     const inspectOutcomeButton = document.getElementById('inspectOutcomeButton');
     const recodeType = document.getElementById('recodeType');
-    const recodeBuilderStack = document.getElementById('recodeBuilderStack');
-    const recodeLockCard = document.getElementById('recodeLockCard');
-    const inspectRecodeOutputButton = document.getElementById('inspectRecodeOutputButton');
-    const lockRecodeConfigButton = document.getElementById('lockRecodeConfig');
-    const editRecodeConfigButton = document.getElementById('editRecodeConfig');
+    const launchRecodeBuilder = document.getElementById('launchRecodeBuilder');
     const recodeSourceColumn = document.getElementById('recodeSourceColumn');
     const recodeOutputColumn = document.getElementById('recodeOutputColumn');
     const mapFromValue = document.getElementById('mapFromValue');
@@ -582,7 +525,7 @@
       if (currentPredictorSelections().length === 0) issues.push('Select at least one predictor.');
       const hasNonNumericPredictor = currentPredictorSelections().some((name) => !(columnProfiles[name]?.inferred_type || '').includes('numeric'));
       if (hasNonNumericPredictor) issues.push('Remove or recode non-numeric predictors before running KDA.');
-      if (recodeConfigLocked) issues.push('Finish or unlock the transform currently being edited.');
+      if (recodeDraftReady()) issues.push('Add or clear the transform draft before continuing.');
       if (draftRules.length > 0 || String(segmentName.value || '').trim()) issues.push('Save or clear the segment builder draft.');
       return issues;
     }
@@ -644,26 +587,25 @@
       return recodeOutputColumn.value.trim();
     }
 
-    function recodeConfigReady() {
+    function recodeDraftReady() {
       return Boolean(recodeSourceColumn.value && recodeType.value && selectedRecodeOutputName());
     }
 
-    function syncRecodeLockUi() {
-      recodeLockCard.classList.toggle('hidden', !recodeConfigReady());
-      inspectRecodeOutputButton.textContent = selectedRecodeOutputName() || '—';
-      inspectRecodeOutputButton.dataset.columnName = selectedRecodeOutputName();
-      recodeBuilderStack.classList.toggle('hidden', !recodeConfigLocked);
-      editRecodeConfigButton.classList.toggle('hidden', !recodeConfigLocked);
-      lockRecodeConfigButton.classList.toggle('hidden', recodeConfigLocked);
-      recodeSourceColumn.disabled = recodeConfigLocked;
-      recodeType.disabled = recodeConfigLocked;
-      recodeOutputColumn.disabled = recodeConfigLocked;
-      if (!recodeConfigLocked) {
-        draftMapRules = [];
-        draftBucketRules = [];
-        renderMapDraft();
-        renderBucketDraft();
-      }
+    function clearRecodeDraft() {
+      recodeSourceColumn.value = '';
+      recodeType.value = '';
+      recodeOutputColumn.value = '';
+      draftMapRules = [];
+      draftBucketRules = [];
+      flagOperator.value = 'equals';
+      flagValue.value = '';
+      renderMapDraft();
+      renderBucketDraft();
+      updateRecodeDraftUi();
+    }
+
+    function updateRecodeDraftUi() {
+      launchRecodeBuilder.classList.toggle('ready', recodeDraftReady());
       updateStepAvailability();
     }
 
@@ -718,7 +660,7 @@
       if (allDisplayColumns().includes(current)) {
         recodeSourceColumn.value = current;
       }
-      syncRecodeLockUi();
+      updateRecodeDraftUi();
     }
 
     function predictorCandidates() {
@@ -970,56 +912,169 @@
       });
     }
 
-    function renderSavedRecodes() {
-      savedRecodes.innerHTML = savedRecodesState.length ? '' : '<div class="empty-state">No saved transforms yet.</div>';
-      savedRecodesState.forEach((recode, idx) => {
-        const el = document.createElement('div');
-        el.className = 'selected-item';
-        let detail = '';
-        if (recode.type === 'map_values') {
-          detail = Object.entries(recode.mapping || {}).map(([k, v]) => `${escapeHtml(k)} → ${escapeHtml(v)}`).join('<br>');
-        } else if (recode.type === 'bucket_numeric') {
-          detail = (recode.bins || []).map((b) => `${escapeHtml(b.label)}: ${b.min ?? '-∞'} to ${b.max ?? '+∞'}`).join('<br>');
-        } else {
-          detail = `${escapeHtml(recode.operator)} ${escapeHtml(recode.value)} → 1 / 0`;
-        }
-        el.innerHTML = `<div class="selected-item-head"><button type="button" class="button-link secondary outcome-inspect-trigger mono js-inspect-link" data-column-name="${escapeHtml(recode.output_column)}">${escapeHtml(recode.output_column)}</button><div class="inline-actions"><button type="button" class="button-link secondary" data-edit-recode="${idx}">Edit</button><button type="button" class="button-link secondary" data-remove-recode="${idx}">Remove</button></div></div><div class="sub small">${escapeHtml(recode.source_column)} · ${escapeHtml(recode.type)}</div><div>${detail}</div>`;
-        savedRecodes.appendChild(el);
-      });
-      bindColumnInspectorTriggers();
-      document.querySelectorAll('[data-remove-recode]').forEach((btn) => {
-        btn.addEventListener('click', async () => {
-          savedRecodesState.splice(Number(btn.dataset.removeRecode), 1);
-          recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
-          renderSavedRecodes();
-          await refreshPrepPreview();
-        });
-      });
-      document.querySelectorAll('[data-edit-recode]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const recode = savedRecodesState[Number(btn.dataset.editRecode)];
-          recodeSourceColumn.value = recode.source_column;
-          recodeType.value = recode.type;
-          recodeOutputColumn.value = recode.output_column;
-          recodeConfigLocked = true;
-          draftMapRules = recode.type === 'map_values' ? Object.entries(recode.mapping || {}).map(([from, to]) => ({ from, to })) : [];
-          draftBucketRules = recode.type === 'bucket_numeric' ? (recode.bins || []).map((b) => ({ min: b.min ?? '', max: b.max ?? '', label: b.label })) : [];
-          flagOperator.value = recode.operator || 'equals';
-          flagValue.value = recode.value || '';
-          syncRecodeLockUi();
-          setRecodePanel(recode.type);
-          renderMapDraft();
-          renderBucketDraft();
-          setStatus(recodeBuilderStatus, `Editing transform '${recode.output_column}'.`, 'info');
-        });
-      });
+    function recodeDetailHtml(recode) {
+      if (recode.type === 'map_values') {
+        return Object.entries(recode.mapping || {}).map(([k, v]) => `${escapeHtml(k)} → ${escapeHtml(v)}`).join('<br>');
+      }
+      if (recode.type === 'bucket_numeric') {
+        return (recode.bins || []).map((b) => `${escapeHtml(b.label)}: ${b.min ?? '-∞'} to ${b.max ?? '+∞'}`).join('<br>');
+      }
+      return `${escapeHtml(recode.operator)} ${escapeHtml(recode.value)} → 1 / 0`;
     }
 
-    function setRecodePanel(type) {
-      const enabled = recodeConfigLocked && !!type;
-      document.getElementById('recodeMapValuesPanel').classList.toggle('hidden', !enabled || type !== 'map_values');
-      document.getElementById('recodeBucketPanel').classList.toggle('hidden', !enabled || type !== 'bucket_numeric');
-      document.getElementById('recodeFlagPanel').classList.toggle('hidden', !enabled || type !== 'boolean_flag');
+    function renderSavedRecodes() {
+      savedRecodes.innerHTML = savedRecodesState.length ? '' : '<div class="empty-state">No transforms yet.</div>';
+      savedRecodesState.forEach((recode, idx) => {
+        const isActive = recodeDraftReady() && recode.output_column === selectedRecodeOutputName();
+        const panelId = `recodePanel_${idx}`;
+        const el = document.createElement('div');
+        el.className = 'selected-item recode-card';
+        el.innerHTML = `
+          <div class="selected-item-head">
+            <div>
+              <strong>${escapeHtml(recode.output_column)}</strong>
+              <div class="sub small">${escapeHtml(recode.source_column)} → ${escapeHtml(recode.type)}</div>
+            </div>
+            <div class="inline-actions">
+              <button type="button" class="recode-toggle-button ${isActive ? 'active' : ''}" data-toggle-recode="${idx}" aria-label="${isActive ? 'Cancel transform' : 'Edit transform'}">${isActive ? '−' : '+'}</button>
+            </div>
+          </div>
+          <div class="recode-builder-stack ${isActive ? '' : 'hidden'}" id="${panelId}">
+            <div id="recodeMapValuesPanel_${idx}" class="recode-panel ${recode.type === 'map_values' ? '' : 'hidden'}">
+              <label class="field-label small">Value mapping</label>
+              <div class="field-grid three">
+                <div><input type="text" id="mapFromValue_${idx}" placeholder="From value"></div>
+                <div><input type="text" id="mapToValue_${idx}" placeholder="To value"></div>
+                <div><button type="button" class="button-link secondary" data-add-map="${idx}">Add mapping row</button></div>
+              </div>
+              <div class="selected-package" id="mapRuleDraft_${idx}"></div>
+            </div>
+            <div id="recodeBucketPanel_${idx}" class="recode-panel ${recode.type === 'bucket_numeric' ? '' : 'hidden'}">
+              <label class="field-label small">Numeric buckets</label>
+              <div class="field-grid four">
+                <div><input type="text" id="bucketMin_${idx}" placeholder="Min"></div>
+                <div><input type="text" id="bucketMax_${idx}" placeholder="Max"></div>
+                <div><input type="text" id="bucketLabel_${idx}" placeholder="Label"></div>
+                <div><button type="button" class="button-link secondary" data-add-bucket="${idx}">Add bucket</button></div>
+              </div>
+              <div class="selected-package" id="bucketRuleDraft_${idx}"></div>
+            </div>
+            <div id="recodeFlagPanel_${idx}" class="recode-panel ${recode.type === 'boolean_flag' ? '' : 'hidden'}">
+              <label class="field-label small">Boolean flag rule</label>
+              <div class="field-grid three">
+                <div>
+                  <select id="flagOperator_${idx}">
+                    <option value="equals" ${recode.operator === 'equals' ? 'selected' : ''}>equals</option>
+                    <option value="not_equals" ${recode.operator === 'not_equals' ? 'selected' : ''}>not equals</option>
+                    <option value="contains" ${recode.operator === 'contains' ? 'selected' : ''}>contains</option>
+                    <option value="in" ${recode.operator === 'in' ? 'selected' : ''}>in list</option>
+                    <option value="gt" ${recode.operator === 'gt' ? 'selected' : ''}>&gt;</option>
+                    <option value="gte" ${recode.operator === 'gte' ? 'selected' : ''}>&gt;=</option>
+                    <option value="lt" ${recode.operator === 'lt' ? 'selected' : ''}>&lt;</option>
+                    <option value="lte" ${recode.operator === 'lte' ? 'selected' : ''}>&lt;=</option>
+                  </select>
+                </div>
+                <div><input type="text" id="flagValue_${idx}" placeholder="Match value or list a|b|c" value="${escapeHtml(recode.value || '')}"></div>
+                <div class="segment-builder-note">Always outputs 1 for match and 0 otherwise.</div>
+              </div>
+            </div>
+          </div>
+          ${!isActive ? `<div>${recodeDetailHtml(recode)}</div>` : ''}
+        `;
+        savedRecodes.appendChild(el);
+        if (isActive) {
+          if (recode.type === 'map_values') {
+            const wrap = document.getElementById(`mapRuleDraft_${idx}`);
+            wrap.innerHTML = draftMapRules.length ? '' : '<div class="empty-state compact">No mapping rows yet.</div>';
+            draftMapRules.forEach((rule, ridx) => {
+              wrap.innerHTML += `<div class="selected-item"><div class="selected-item-head"><span>${escapeHtml(rule.from)} → ${escapeHtml(rule.to)}</span><button type="button" class="button-link secondary" data-remove-map="${ridx}">Remove</button></div></div>`;
+            });
+          } else if (recode.type === 'bucket_numeric') {
+            const wrap = document.getElementById(`bucketRuleDraft_${idx}`);
+            wrap.innerHTML = draftBucketRules.length ? '' : '<div class="empty-state compact">No bucket rows yet.</div>';
+            draftBucketRules.forEach((rule, ridx) => {
+              const minLabel = rule.min === '' ? '-∞' : rule.min;
+              const maxLabel = rule.max === '' ? '+∞' : rule.max;
+              wrap.innerHTML += `<div class="selected-item"><div class="selected-item-head"><span>${escapeHtml(rule.label)}: ${escapeHtml(minLabel)} to ${escapeHtml(maxLabel)}</span><button type="button" class="button-link secondary" data-remove-bucket="${ridx}">Remove</button></div></div>`;
+            });
+          }
+        }
+      });
+      bindColumnInspectorTriggers();
+      document.querySelectorAll('[data-toggle-recode]').forEach((btn) => btn.addEventListener('click', async () => {
+        const idx = Number(btn.dataset.toggleRecode);
+        const recode = savedRecodesState[idx];
+        if (recodeDraftReady() && selectedRecodeOutputName() === recode.output_column) {
+          clearRecodeDraft();
+          renderSavedRecodes();
+          return;
+        }
+        recodeSourceColumn.value = recode.source_column;
+        recodeType.value = recode.type;
+        recodeOutputColumn.value = recode.output_column;
+        draftMapRules = recode.type === 'map_values' ? Object.entries(recode.mapping || {}).map(([from, to]) => ({ from, to })) : [];
+        draftBucketRules = recode.type === 'bucket_numeric' ? (recode.bins || []).map((b) => ({ min: b.min ?? '', max: b.max ?? '', label: b.label })) : [];
+        flagOperator.value = recode.operator || 'equals';
+        flagValue.value = recode.value || '';
+        updateRecodeDraftUi();
+        renderSavedRecodes();
+        renderInspector(recode.source_column);
+      }));
+      document.querySelectorAll('[data-add-map]').forEach((btn) => btn.addEventListener('click', async () => {
+        const idx = Number(btn.dataset.addMap);
+        const from = document.getElementById(`mapFromValue_${idx}`).value.trim();
+        const to = document.getElementById(`mapToValue_${idx}`).value.trim();
+        if (!from || !to) return;
+        draftMapRules.push({ from, to });
+        savedRecodesState[idx].mapping = Object.fromEntries(draftMapRules.map((row) => [row.from, row.to]));
+        recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+        await refreshPrepPreview();
+      }));
+      document.querySelectorAll('[data-add-bucket]').forEach((btn) => btn.addEventListener('click', async () => {
+        const idx = Number(btn.dataset.addBucket);
+        const min = document.getElementById(`bucketMin_${idx}`).value.trim();
+        const max = document.getElementById(`bucketMax_${idx}`).value.trim();
+        const label = document.getElementById(`bucketLabel_${idx}`).value.trim();
+        if (!label) return;
+        draftBucketRules.push({ min, max, label });
+        savedRecodesState[idx].bins = draftBucketRules.map((row) => ({ min: row.min === '' ? null : Number(row.min), max: row.max === '' ? null : Number(row.max), label: row.label, include_min: true, include_max: true }));
+        recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+        await refreshPrepPreview();
+      }));
+      document.querySelectorAll('[data-remove-map]').forEach((btn) => btn.addEventListener('click', async () => {
+        draftMapRules.splice(Number(btn.dataset.removeMap), 1);
+        const idx = savedRecodesState.findIndex((item) => item.output_column === selectedRecodeOutputName());
+        if (idx >= 0) savedRecodesState[idx].mapping = Object.fromEntries(draftMapRules.map((row) => [row.from, row.to]));
+        recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+        await refreshPrepPreview();
+      }));
+      document.querySelectorAll('[data-remove-bucket]').forEach((btn) => btn.addEventListener('click', async () => {
+        draftBucketRules.splice(Number(btn.dataset.removeBucket), 1);
+        const idx = savedRecodesState.findIndex((item) => item.output_column === selectedRecodeOutputName());
+        if (idx >= 0) savedRecodesState[idx].bins = draftBucketRules.map((row) => ({ min: row.min === '' ? null : Number(row.min), max: row.max === '' ? null : Number(row.max), label: row.label, include_min: true, include_max: true }));
+        recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+        await refreshPrepPreview();
+      }));
+      savedRecodes.querySelectorAll('[id^="flagOperator_"]').forEach((el) => el.addEventListener('change', async () => {
+        const idx = Number(el.id.split('_').pop());
+        savedRecodesState[idx].operator = el.value;
+        savedRecodesState[idx].value = document.getElementById(`flagValue_${idx}`).value.trim();
+        recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+        await refreshPrepPreview();
+      }));
+      savedRecodes.querySelectorAll('[id^="flagValue_"]').forEach((el) => el.addEventListener('change', async () => {
+        const idx = Number(el.id.split('_').pop());
+        savedRecodesState[idx].operator = document.getElementById(`flagOperator_${idx}`).value;
+        savedRecodesState[idx].value = el.value.trim();
+        recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+        await refreshPrepPreview();
+      }));
+    }
+
+    function setRecodePanel(type, enabled = true) {
+      document.getElementById('recodeMapValuesPanel')?.classList.toggle('hidden', !enabled || type !== 'map_values');
+      document.getElementById('recodeBucketPanel')?.classList.toggle('hidden', !enabled || type !== 'bucket_numeric');
+      document.getElementById('recodeFlagPanel')?.classList.toggle('hidden', !enabled || type !== 'boolean_flag');
       renderInspector(recodeSourceColumn.value || targetColumnSelect.value);
     }
 
@@ -1104,71 +1159,6 @@
       return true;
     }
 
-    document.getElementById('addMapRule')?.addEventListener('click', () => {
-      const from = mapFromValue.value.trim();
-      const to = mapToValue.value.trim();
-      if (!from || !to) return;
-      draftMapRules.push({ from, to });
-      mapFromValue.value = '';
-      mapToValue.value = '';
-      renderMapDraft();
-    });
-
-    document.getElementById('addBucketRule')?.addEventListener('click', () => {
-      const label = bucketLabel.value.trim();
-      if (!label) return;
-      draftBucketRules.push({ min: bucketMin.value.trim(), max: bucketMax.value.trim(), label });
-      bucketMin.value = '';
-      bucketMax.value = '';
-      bucketLabel.value = '';
-      renderBucketDraft();
-    });
-
-    document.getElementById('saveRecodeDefinition')?.addEventListener('click', async () => {
-      const type = recodeType.value;
-      const source_column = recodeSourceColumn.value;
-      const output_column = recodeOutputColumn.value.trim();
-      if (!recodeConfigLocked) {
-        setStatus(recodeBuilderStatus, 'Lock the source column, transform type, and new column name first.', 'error');
-        return;
-      }
-
-      const existingIndex = savedRecodesState.findIndex((item) => item.output_column === output_column);
-      let payload = { type, source_column, output_column };
-      if (type === 'map_values') {
-        if (draftMapRules.length === 0) {
-          setStatus(recodeBuilderStatus, 'Add at least one mapping row.', 'error');
-          return;
-        }
-        payload.mapping = Object.fromEntries(draftMapRules.map((row) => [row.from, row.to]));
-      } else if (type === 'bucket_numeric') {
-        if (draftBucketRules.length === 0) {
-          setStatus(recodeBuilderStatus, 'Add at least one bucket.', 'error');
-          return;
-        }
-        payload.bins = draftBucketRules.map((row) => ({ min: row.min === '' ? null : Number(row.min), max: row.max === '' ? null : Number(row.max), label: row.label, include_min: true, include_max: true }));
-      } else {
-        if (!flagValue.value.trim()) {
-          setStatus(recodeBuilderStatus, 'Flag value is required.', 'error');
-          return;
-        }
-        payload.operator = flagOperator.value;
-        payload.value = flagValue.value.trim();
-      }
-
-      if (existingIndex >= 0) savedRecodesState.splice(existingIndex, 1, payload);
-      else savedRecodesState.push(payload);
-      recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
-      flagValue.value = '';
-      draftMapRules = [];
-      draftBucketRules = [];
-      renderMapDraft();
-      renderBucketDraft();
-      renderSavedRecodes();
-      const ok = await refreshPrepPreview();
-      if (ok) setStatus(recodeBuilderStatus, `${existingIndex >= 0 ? 'Updated' : 'Saved'} transform '${output_column}'.`, 'success');
-    });
-
     document.getElementById('addSegmentRule')?.addEventListener('click', () => {
       const operator = segmentRuleOperator.value;
       const value = segmentRuleValue.value.trim();
@@ -1246,30 +1236,6 @@
       }
       setWorkflowTab(tab.dataset.tab);
     }));
-    lockRecodeConfigButton?.addEventListener('click', () => {
-      if (!selectedRecodeOutputName()) {
-        setStatus(recodeBuilderStatus, 'New column name is required.', 'error');
-        return;
-      }
-      if (!recodeSourceColumn.value || !recodeType.value) {
-        setStatus(recodeBuilderStatus, 'Choose a source column and transform type first.', 'error');
-        return;
-      }
-      if (allDisplayColumns().includes(selectedRecodeOutputName()) || savedRecodesState.some((item) => item.output_column === selectedRecodeOutputName() && item.source_column !== recodeSourceColumn.value)) {
-        setStatus(recodeBuilderStatus, `Column '${selectedRecodeOutputName()}' already exists.`, 'error');
-        return;
-      }
-      recodeConfigLocked = true;
-      syncRecodeLockUi();
-      setRecodePanel(recodeType.value);
-      setStatus(recodeBuilderStatus, `Locked transform setup for '${selectedRecodeOutputName()}'.`, 'success');
-    });
-    editRecodeConfigButton?.addEventListener('click', () => {
-      recodeConfigLocked = false;
-      syncRecodeLockUi();
-      setRecodePanel(recodeType.value);
-      setStatus(recodeBuilderStatus, 'Transform setup unlocked for editing.', 'info');
-    });
     document.getElementById('goToModelTab')?.addEventListener('click', () => setWorkflowTab('model'));
     document.getElementById('backToRecodeTab')?.addEventListener('click', () => setWorkflowTab('recode'));
     document.getElementById('goToSegmentTab')?.addEventListener('click', () => setWorkflowTab('segment'));
@@ -1302,7 +1268,6 @@
     predictorSearch?.addEventListener('input', filterPredictorPicker);
     segmentColumnSearch?.addEventListener('input', filterSegmentColumnOptions);
     recodeOutputColumn?.addEventListener('input', syncRecodeLockUi);
-    inspectRecodeOutputButton?.addEventListener('click', () => { if (selectedRecodeOutputName()) renderInspector(selectedRecodeOutputName()); });
     document.querySelector('.js-select-all')?.addEventListener('click', () => {
       Array.from(document.querySelectorAll('input[name="predictor_columns"]')).forEach((el) => { el.checked = true; });
       rebuildPredictorUI();
@@ -1320,13 +1285,10 @@
     renderDraftRules();
     renderSavedSegments();
     renderSegmentPreviews();
-    renderMapDraft();
-    renderBucketDraft();
     renderSavedRecodes();
     syncRecodeLockUi();
     renderSegmentTree();
     syncSegmentOperatorOptions(segmentRuleColumn.value);
-    setRecodePanel(recodeType.value);
     syncInspectorCollapse();
     updateConfirmationPanel();
     renderInspector(inspectorColumnSelect.value || targetColumnSelect.value || allDisplayColumns()[0]);
