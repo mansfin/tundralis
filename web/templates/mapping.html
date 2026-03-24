@@ -42,7 +42,8 @@
                 <div class="recode-draft-row">
                   <div>
                     <label class="field-label small">Source column</label>
-                    <select id="recodeSourceColumn"></select>
+                    <div class="column-selector" id="recodeSourceColumnSelector"></div>
+                    <input type="hidden" id="recodeSourceColumn" value="">
                   </div>
                   <div>
                     <label class="field-label small">Transform type</label>
@@ -475,6 +476,7 @@
     const recodeType = document.getElementById('recodeType');
     const launchRecodeBuilder = document.getElementById('launchRecodeBuilder');
     const recodeSourceColumn = document.getElementById('recodeSourceColumn');
+    const recodeSourceColumnSelector = document.getElementById('recodeSourceColumnSelector');
     const recodeOutputColumn = document.getElementById('recodeOutputColumn');
     const mapFromValue = document.getElementById('mapFromValue');
     const mapToValue = document.getElementById('mapToValue');
@@ -589,7 +591,7 @@
     }
 
     function clearRecodeDraft() {
-      recodeSourceColumn.value = '';
+      recodeSourceSelector.setValue('');
       recodeType.value = '';
       recodeOutputColumn.value = '';
       draftMapRules = [];
@@ -598,6 +600,7 @@
       flagValue.value = '';
       renderMapDraft();
       renderBucketDraft();
+      recodeSourceSelector.sync();
       updateRecodeDraftUi();
     }
 
@@ -651,14 +654,152 @@
       }
     }
 
-    function rebuildRecodeSourceOptions() {
-      const current = recodeSourceColumn.value;
-      recodeSourceColumn.innerHTML = allDisplayColumns().map((col) => `<option value="${escapeHtml(col)}">${escapeHtml(col)}</option>`).join('');
-      if (allDisplayColumns().includes(current)) {
-        recodeSourceColumn.value = current;
-      }
-      updateRecodeDraftUi();
+    function scoreColumnMatch(name, query) {
+      if (!query) return 0;
+      const lower = name.toLowerCase();
+      const q = query.toLowerCase();
+      if (lower === q) return 1000;
+      if (lower.startsWith(q)) return 700;
+      if (lower.includes(q)) return 400 - lower.indexOf(q);
+      return -1;
     }
+
+    function buildSearchableColumnSelector(container, {
+      inputEl,
+      label = 'Select Column',
+      placeholder = 'Select Column',
+      getOptions,
+      onChange,
+    }) {
+      let isOpen = false;
+      let query = '';
+      let highlightIndex = 0;
+      container.innerHTML = `
+        <button type="button" class="column-selector-trigger" aria-haspopup="listbox" aria-expanded="false">
+          <span class="column-selector-value">${escapeHtml(placeholder)}</span>
+          <span class="column-selector-actions">
+            <span class="column-selector-clear hidden" aria-label="Clear selection">×</span>
+            <span class="column-selector-caret">▾</span>
+          </span>
+        </button>
+        <div class="column-selector-panel hidden">
+          <input type="text" class="column-selector-search" placeholder="Search columns..." aria-label="Search columns">
+          <div class="column-selector-list" role="listbox"></div>
+        </div>`;
+      const trigger = container.querySelector('.column-selector-trigger');
+      const valueEl = container.querySelector('.column-selector-value');
+      const clearEl = container.querySelector('.column-selector-clear');
+      const panel = container.querySelector('.column-selector-panel');
+      const search = container.querySelector('.column-selector-search');
+      const list = container.querySelector('.column-selector-list');
+
+      function rankedOptions() {
+        const options = getOptions();
+        if (!query) return options.map((name, index) => ({ name, score: 0, index }));
+        return options
+          .map((name, index) => ({ name, score: scoreColumnMatch(name, query), index }))
+          .filter((item) => item.score >= 0)
+          .sort((a, b) => b.score - a.score || a.index - b.index);
+      }
+
+      function render() {
+        const options = rankedOptions();
+        valueEl.textContent = inputEl.value || placeholder;
+        clearEl.classList.toggle('hidden', !inputEl.value);
+        trigger.setAttribute('aria-expanded', String(isOpen));
+        panel.classList.toggle('hidden', !isOpen);
+        trigger.classList.toggle('has-value', Boolean(inputEl.value));
+        if (!options.length) {
+          list.innerHTML = '<div class="column-selector-empty">No results found</div>';
+          return;
+        }
+        highlightIndex = Math.max(0, Math.min(highlightIndex, options.length - 1));
+        list.innerHTML = options.map((item, idx) => `
+          <button type="button" class="column-selector-option ${idx === highlightIndex ? 'is-active' : ''}" role="option" aria-selected="${inputEl.value === item.name ? 'true' : 'false'}" data-value="${escapeHtml(item.name)}">${escapeHtml(item.name)}</button>`).join('');
+      }
+
+      function open() {
+        isOpen = true;
+        render();
+        search.value = query;
+        setTimeout(() => search.focus(), 0);
+      }
+      function close() {
+        isOpen = false;
+        query = '';
+        highlightIndex = 0;
+        render();
+      }
+      function commit(value) {
+        inputEl.value = value;
+        onChange?.(value);
+        close();
+      }
+
+      trigger.addEventListener('click', (event) => {
+        const clearClicked = event.target.closest('.column-selector-clear');
+        if (clearClicked) {
+          inputEl.value = '';
+          onChange?.('');
+          close();
+          return;
+        }
+        isOpen ? close() : open();
+      });
+
+      search.addEventListener('input', () => {
+        query = search.value;
+        highlightIndex = 0;
+        render();
+      });
+      search.addEventListener('keydown', (event) => {
+        const options = rankedOptions();
+        if (event.key === 'ArrowDown') {
+          event.preventDefault();
+          highlightIndex = Math.min(highlightIndex + 1, Math.max(options.length - 1, 0));
+          render();
+        } else if (event.key === 'ArrowUp') {
+          event.preventDefault();
+          highlightIndex = Math.max(highlightIndex - 1, 0);
+          render();
+        } else if (event.key === 'Enter') {
+          event.preventDefault();
+          if (options[highlightIndex]) commit(options[highlightIndex].name);
+        } else if (event.key === 'Escape') {
+          event.preventDefault();
+          close();
+        }
+      });
+
+      list.addEventListener('click', (event) => {
+        const option = event.target.closest('.column-selector-option');
+        if (!option) return;
+        commit(option.dataset.value || '');
+      });
+
+      document.addEventListener('click', (event) => {
+        if (!container.contains(event.target)) close();
+      });
+
+      return {
+        sync() {
+          if (inputEl.value && !getOptions().includes(inputEl.value)) inputEl.value = '';
+          render();
+        },
+        setValue(value) {
+          inputEl.value = value || '';
+          render();
+        }
+      };
+    }
+
+
+    const recodeSourceSelector = buildSearchableColumnSelector(recodeSourceColumnSelector, {
+      inputEl: recodeSourceColumn,
+      placeholder: 'Select Column',
+      getOptions: () => allDisplayColumns(),
+      onChange: (value) => { updateRecodeDraftUi(); renderSavedRecodes(); renderInspector(value || targetColumnSelect.value); }
+    });
 
     function predictorCandidates() {
       return allDisplayColumns()
@@ -1006,7 +1147,7 @@
           renderSavedRecodes();
           return;
         }
-        recodeSourceColumn.value = recode.source_column;
+        recodeSourceSelector.setValue(recode.source_column);
         recodeType.value = recode.type;
         recodeOutputColumn.value = recode.output_column;
         draftMapRules = recode.type === 'map_values' ? Object.entries(recode.mapping || {}).map(([from, to]) => ({ from, to })) : [];
@@ -1246,7 +1387,6 @@
     document.getElementById('resetSegmentTree')?.addEventListener('click', () => { segmentTreeState = createEmptyGroup('all'); renderSegmentTree(); });
     document.getElementById('resetSegmentBuilder')?.addEventListener('click', resetSegmentBuilder);
     recodeType?.addEventListener('change', () => { updateRecodeDraftUi(); renderSavedRecodes(); renderInspector(recodeSourceColumn.value || targetColumnSelect.value); });
-    recodeSourceColumn?.addEventListener('change', (e) => { updateRecodeDraftUi(); renderSavedRecodes(); renderInspector(e.target.value); });
     inspectorColumnSelect?.addEventListener('change', (e) => renderInspector(e.target.value));
     targetColumnSelect?.addEventListener('change', () => {
       currentTarget = targetColumnSelect.value;

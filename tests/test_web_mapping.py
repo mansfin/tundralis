@@ -49,6 +49,8 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn("toggleInspectorButton", html)
         self.assertIn("segmentColumnSearch", html)
         self.assertIn("launchRecodeBuilder", html)
+        self.assertIn("recodeSourceColumnSelector", html)
+        self.assertIn("column-selector-search", html)
         self.assertIn("inspectOutcomeButton", html)
         self.assertIn("Nested condition tree", html)
         self.assertIn("segmentTreeCanvas", html)
