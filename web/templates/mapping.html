@@ -9,8 +9,9 @@
   <main class="shell wide">
     <section class="card">
       <div class="eyebrow">tundralis</div>
-      <h1>Review mapping</h1>
-      <p class="sub">File: <strong>{{ display_filename or filename }}</strong></p>
+      <h1>Review your analysis setup</h1>
+      <p class="sub">We detected the likely outcome, candidate drivers, and fields to exclude. Review the setup or make changes before running KDA.</p>
+      <p class="sub small">File: <strong>{{ display_filename or filename }}</strong></p>
       {% if error %}<div class="error">{{ error }}</div>{% endif %}
       <form action="/run" method="post" class="mapping-stack" id="mappingForm">
         <input type="hidden" name="job_id" value="{{ job_id }}">
@@ -21,46 +22,46 @@
         <div class="inspector-layout">
           <div class="mapping-main">
             <div class="workflow-tabs" aria-label="Workflow progression">
-              <button type="button" class="workflow-tab active" data-tab="recode"><span class="workflow-step-dot"></span><span>Data shaping</span></button>
+              <button type="button" class="workflow-tab active" data-tab="model"><span class="workflow-step-dot"></span><span>Analysis setup</span></button>
               <span class="workflow-arrow" aria-hidden="true"></span>
-              <button type="button" class="workflow-tab" data-tab="model"><span class="workflow-step-dot"></span><span>Analysis setup</span></button>
+              <button type="button" class="workflow-tab" data-tab="recode"><span class="workflow-step-dot"></span><span>Adjust data setup</span></button>
               <span class="workflow-arrow" aria-hidden="true"></span>
-              <button type="button" class="workflow-tab" data-tab="segment"><span class="workflow-step-dot"></span><span>Segment builder</span></button>
+              <button type="button" class="workflow-tab" data-tab="segment"><span class="workflow-step-dot"></span><span>Segments</span></button>
               <span class="workflow-arrow" aria-hidden="true"></span>
-              <button type="button" class="workflow-tab" data-tab="confirm"><span class="workflow-step-dot"></span><span>Review + run</span></button>
+              <button type="button" class="workflow-tab" data-tab="confirm"><span class="workflow-step-dot"></span><span>Run + download</span></button>
             </div>
 
-            <section class="card inner workflow-panel" data-panel="recode">
+            <section class="card inner workflow-panel hidden" data-panel="recode">
               <div class="section-head block">
                 <div>
-                  <h2>Data shaping</h2>
-                  <p class="sub small">Create derived variables first. The transformed dataset then feeds outcome selection, predictors, segments, and the column inspector.</p>
+                  <h2>Adjust data setup</h2>
+                  <p class="sub small">Use this only if Tundralis interpreted something incorrectly or you need a custom setup. Any new fields you create here will be available for the analysis.</p>
                 </div>
               </div>
 
               <div class="picker-card">
                 <div class="recode-draft-row">
                   <div>
-                    <label class="field-label small">Source column</label>
+                    <label class="field-label small">Field to adjust</label>
                     <div class="column-selector" id="recodeSourceColumnSelector"></div>
                     <input type="hidden" id="recodeSourceColumn" value="">
                   </div>
                   <div>
-                    <label class="field-label small">Transform type</label>
+                    <label class="field-label small">Adjustment type</label>
                     <select id="recodeType">
-                      <option value="">Choose transform type</option>
-                      <option value="map_values">Map values</option>
-                      <option value="bucket_numeric">Bucket numeric</option>
-                      <option value="boolean_flag">Boolean flag</option>
+                      <option value="">Choose an adjustment</option>
+                      <option value="map_values">Re-label values</option>
+                      <option value="bucket_numeric">Group numeric values</option>
+                      <option value="boolean_flag">Create yes/no flag</option>
                     </select>
                   </div>
                   <div>
-                    <label class="field-label small">New column name</label>
-                    <input type="text" id="recodeOutputColumn" placeholder="e.g. region_tier or enterprise_flag" required>
+                    <label class="field-label small">New field name</label>
+                    <input type="text" id="recodeOutputColumn" placeholder="e.g. region_group or is_enterprise" required>
                   </div>
                   <div class="recode-draft-action">
-                    <label class="field-label small">Create</label>
-                    <button type="button" class="recode-add-button" id="launchRecodeBuilder" aria-label="Create transform">+</button>
+                    <label class="field-label small">Save</label>
+                    <button type="button" class="recode-add-button" id="launchRecodeBuilder" aria-label="Save adjustment">+</button>
                   </div>
                 </div>
 
@@ -70,66 +71,136 @@
               </div>
             </section>
 
-            <section class="workflow-panel hidden" data-panel="model">
+            <section class="workflow-panel" data-panel="model">
+              <div class="card inner recommendation-card">
+                <div class="section-head block">
+                  <div>
+                    <h2>Recommended configuration</h2>
+                    <p class="sub small" id="recommendationStatus">Review suggested setup</p>
+                  </div>
+                </div>
+                <p class="sub small">Tundralis selected one likely outcome variable, included candidate driver questions, and excluded fields that should not be modeled.</p>
+                <div id="schemaConfidenceBanner" class="schema-banner">
+                  <div class="schema-banner-title" id="schemaConfidenceTitle">Review suggested schema</div>
+                  <div class="schema-banner-copy" id="schemaConfidenceCopy">Tundralis is checking whether this file includes descriptive labels or code-style field names.</div>
+                </div>
+                <div class="field-grid recommendation-summary-grid">
+                  <div class="selected-item">
+                    <label class="field-label">Outcome</label>
+                    <div class="mono" id="recommendationOutcome">—</div>
+                    <div class="sub small">The main measure you want to explain</div>
+                  </div>
+                  <div class="selected-item">
+                    <label class="field-label">Drivers</label>
+                    <strong id="recommendationDriverCount">0 selected</strong>
+                    <div class="sub small">Survey measures likely to influence the outcome</div>
+                  </div>
+                  <div class="selected-item">
+                    <label class="field-label">Excluded fields</label>
+                    <strong id="recommendationExcludedCount">0 excluded</strong>
+                    <div class="sub small">IDs, text, metadata, duplicates, or fields that should not be modeled</div>
+                  </div>
+                  <div class="selected-item">
+                    <label class="field-label">Usable responses</label>
+                    <strong id="recommendationUsableRows">—</strong>
+                    <div class="sub small">Rows with enough data to run the model</div>
+                  </div>
+                </div>
+                <div class="selected-item recommendation-details">
+                  <div class="selected-item-head">
+                    <span>Why this setup</span>
+                    <button type="button" class="button-link secondary" id="toggleRecommendationDetails">See details</button>
+                  </div>
+                  <div id="recommendationExplanation" class="sub small">We detected a likely outcome, selected analyzable driver fields, and excluded columns that look like IDs, text, metadata, or administrative fields.</div>
+                  <div id="schemaHint" class="sub small"></div>
+                  <div id="recommendationDetailsPanel" class="recommendation-detail-list hidden"></div>
+                </div>
+                <div class="actions recommendation-actions">
+                  <button type="button" id="runRecommendedButton">Run KDA with recommended setup</button>
+                  <button type="button" class="button-link secondary" id="reviewMappingButton">Review drivers</button>
+                  <button type="button" class="button-link secondary" id="openAdjustDataButton">Adjust data setup</button>
+                  <button type="button" class="button-link secondary" id="openSegmentsButton">Add segments</button>
+                </div>
+                <div class="selected-item recommendation-tools">
+                  <div class="selected-item-head">
+                    <span>Improve labels</span>
+                  </div>
+                  <p class="sub small">Optional. If this file uses code-style fields, upload a simple codebook or rename the recommended fields below.</p>
+                  <div class="actions">
+                    <label class="upload-box small-upload-box">
+                      <input type="file" id="codebookFileInput" accept=".csv,text/csv">
+                      <span>Upload codebook CSV</span>
+                    </label>
+                    <button type="button" class="button-link secondary" id="applyCodebookButton">Apply codebook</button>
+                  </div>
+                  <div id="labelUpgradeStatus" class="sub small"></div>
+                </div>
+              </div>
+
               <div class="card inner">
                 <h2>Outcome</h2>
                 <div class="selected-item outcome-lock-card">
                   <div class="selected-item-head">
-                    <span>Selected outcome</span>
-                    <span class="pill numeric">locked for this run</span>
+                    <span>Recommended outcome</span>
+                    <span class="pill numeric">review before run</span>
                   </div>
                   <button type="button" class="button-link secondary outcome-inspect-trigger mono" id="inspectOutcomeButton">—</button>
                 </div>
                 <div class="field-grid two">
                   <div>
-                    <label class="field-label">Column name</label>
+                    <label class="field-label">Outcome field</label>
                     <select name="target_column" id="targetColumnSelect" required></select>
                   </div>
                   <div>
-                    <label class="field-label">Display name in report</label>
+                    <label class="field-label">Outcome label in report</label>
                     <div id="targetDisplayNameContainer"></div>
                   </div>
                 </div>
+                <p class="sub small">We think this is the main business outcome to explain.</p>
               </div>
 
               <div class="card inner">
                 <div class="section-head block">
                   <div>
-                    <h2>Predictor package</h2>
-                    <p class="sub small">Choose predictors from the transformed dataset. Click any column name to inspect it.</p>
+                    <h2>Drivers</h2>
+                    <p class="sub small">These fields look like candidate drivers of the outcome. Click any field name to inspect it.</p>
                   </div>
+                </div>
+                <div class="selected-item">
+                  <label class="field-label">Recommended field labels</label>
+                  <div id="recommendedRenamePanel" class="recommended-rename-panel"></div>
                 </div>
 
                 <div class="field-grid two predictor-package-layout">
                   <div>
-                    <label class="field-label">Available columns</label>
+                    <label class="field-label">Candidate driver fields</label>
                     <div class="picker-card">
-                      <input type="text" id="predictorSearch" class="search-input" placeholder="Filter columns...">
+                      <input type="text" id="predictorSearch" class="search-input" placeholder="Search driver fields...">
                       <div class="picker-list" id="predictorPicker"></div>
                     </div>
                   </div>
 
                   <div>
-                    <label class="field-label">Selected predictor package</label>
+                    <label class="field-label">Selected drivers</label>
                     <div class="selected-package" id="selectedPredictorPackage"></div>
                   </div>
                 </div>
 
                 <div class="actions module-actions">
-                  <button type="button" class="button-link js-select-all">Select all</button>
-                  <button type="button" class="button-link js-clear-all">Clear all</button>
-                  <button type="button" class="button-link" id="backToRecodeTab">Back to data shaping</button>
-                  <button type="button" class="button-link" id="goToSegmentTab">Continue to segment builder</button>
+                  <button type="button" class="button-link js-select-all">Select all drivers</button>
+                  <button type="button" class="button-link js-clear-all">Clear drivers</button>
+                  <button type="button" class="button-link" id="backToRecodeTab">Adjust data setup</button>
+                  <button type="button" class="button-link" id="goToSegmentTab">Add segments</button>
                 </div>
               </div>
             </section>
 
             <section class="card inner workflow-panel hidden" data-panel="segment">
               <h2>Segments</h2>
-              <p class="sub small">Build segments against the transformed dataset. Use the simple rule builder for most segments and the JSON tree for advanced nested logic.</p>
+              <p class="sub small">Optional. Add segments if you want breakouts in addition to the default overall KDA.</p>
 
               <div>
-                <label class="field-label">Segment builder</label>
+                <label class="field-label">Segment setup</label>
                 <div class="picker-card">
                     <div class="field-grid two">
                       <div>
@@ -194,7 +265,7 @@
                       <button type="button" class="button-link" id="saveSegmentDefinition">Save simple segment</button>
                       <button type="button" class="button-link" id="resetSegmentBuilder">Clear builder</button>
                       <button type="button" class="button-link" id="backToModelTab">Back to analysis setup</button>
-                      <button type="button" class="button-link" id="goToConfirmTab">Continue to review + run</button>
+                      <button type="button" class="button-link" id="goToConfirmTab">Continue to run + download</button>
                     </div>
                   </div>
                 </div>
@@ -204,8 +275,8 @@
             <section class="card inner workflow-panel hidden" data-panel="confirm">
               <div class="section-head block">
                 <div>
-                  <h2>Review + run</h2>
-                  <p class="sub small">Final check before the model runs. Review the file, outcome, predictors, transforms, and segments here.</p>
+                  <h2>Run + download</h2>
+                  <p class="sub small">Final check before the model runs. Review the recommended setup, optional adjustments, and segments here.</p>
                 </div>
               </div>
 
@@ -222,11 +293,11 @@
 
               <div class="field-grid three">
                 <div class="selected-item">
-                  <label class="field-label">Predictors</label>
+                  <label class="field-label">Drivers</label>
                   <strong id="confirmPredictorCount">0</strong>
                 </div>
                 <div class="selected-item">
-                  <label class="field-label">Transforms</label>
+                  <label class="field-label">Adjustments</label>
                   <strong id="confirmRecodeCount">0</strong>
                 </div>
                 <div class="selected-item">
@@ -242,11 +313,11 @@
 
               <div class="field-grid three">
                 <div class="selected-item">
-                  <label class="field-label">Predictor package</label>
+                  <label class="field-label">Selected drivers</label>
                   <div class="selected-package" id="confirmPredictorList"></div>
                 </div>
                 <div class="selected-item">
-                  <label class="field-label">Saved transforms</label>
+                  <label class="field-label">Saved adjustments</label>
                   <div class="selected-package" id="confirmRecodeList"></div>
                 </div>
                 <div class="selected-item">
@@ -257,7 +328,7 @@
 
               <div class="actions">
                 <button type="button" class="button-link" id="backToSegmentFromConfirm">Back to segments</button>
-                <button type="submit" id="runKdaButton">Run KDA</button>
+                <button type="submit" id="runKdaButton">Run KDA with current setup</button>
               </div>
             </section>
           </div>
@@ -266,15 +337,15 @@
             <div class="section-head block">
               <div class="inspector-header-row">
                 <div>
-                  <h2>Column inspector</h2>
-                  <p class="sub small">Click any column name from any step. The inspector stays usable while the main workflow scrolls.</p>
+                  <h2>Field inspector</h2>
+                  <p class="sub small">Click any field name from any step. The inspector stays usable while the main workflow scrolls.</p>
                 </div>
                 <button type="button" class="button-link secondary inspector-toggle" id="toggleInspectorButton" aria-expanded="true">Collapse inspector</button>
               </div>
             </div>
 
             <div>
-              <label class="field-label">Inspect column</label>
+              <label class="field-label">Inspect field</label>
               <select id="inspectorColumnSelect"></select>
             </div>
 
@@ -307,16 +378,24 @@
     </section>
   </main>
   <script>
+    const jobId = {{ job_id | tojson }};
     let columnProfiles = {{ column_profiles | default({}, true) | tojson }};
     let currentColumns = {{ columns | default([], true) | tojson }};
     let currentNumericColumns = {{ numeric_columns | default([], true) | tojson }};
     let currentTarget = {{ inferred_target | default('', true) | tojson }};
+    let savedPredictorSelections = {{ inferred_predictors | default([], true) | tojson }};
+    let recommendationState = {{ recommendation | default({}, true) | tojson }};
+    let savedSegmentColumnsState = {{ saved_segment_columns | default([], true) | tojson }};
+    let savedDisplayNameMap = {{ saved_display_name_map | default({}, true) | tojson }};
     let draftRules = [];
     let savedSegmentDefs = {{ normalized_segment_definitions | default([], true) | tojson }};
     let segmentPreviewsState = {{ segment_previews | default([], true) | tojson }};
-    let savedRecodesState = [];
+    let savedRecodesState = {{ saved_recode_definitions | default([], true) | tojson }};
+    let columnProfilesTrimmed = {{ column_profiles_trimmed | default(false, true) | tojson }};
+    let columnProfileCount = {{ column_profile_count | default(0, true) | tojson }};
     let draftMapRules = [];
     let draftBucketRules = [];
+    let editingRecodeIndex = null;
 
     let segmentTreeState = createEmptyGroup('all');
 
@@ -487,8 +566,6 @@
     const bucketRuleDraft = document.getElementById('bucketRuleDraft');
     const flagOperator = document.getElementById('flagOperator');
     const flagValue = document.getElementById('flagValue');
-    const flagTrueValue = document.getElementById('flagTrueValue');
-    const flagFalseValue = document.getElementById('flagFalseValue');
     const savedRecodes = document.getElementById('savedRecodes');
     const predictorSearch = document.getElementById('predictorSearch');
     const predictorPicker = document.getElementById('predictorPicker');
@@ -508,6 +585,21 @@
     const confirmValidationCard = document.getElementById('confirmValidationCard');
     const confirmValidationMessage = document.getElementById('confirmValidationMessage');
     const runKdaButton = document.getElementById('runKdaButton');
+    const recommendationStatus = document.getElementById('recommendationStatus');
+    const recommendationOutcome = document.getElementById('recommendationOutcome');
+    const recommendationDriverCount = document.getElementById('recommendationDriverCount');
+    const recommendationExcludedCount = document.getElementById('recommendationExcludedCount');
+    const recommendationUsableRows = document.getElementById('recommendationUsableRows');
+    const recommendationExplanation = document.getElementById('recommendationExplanation');
+    const recommendationDetailsPanel = document.getElementById('recommendationDetailsPanel');
+    const schemaHint = document.getElementById('schemaHint');
+    const schemaConfidenceBanner = document.getElementById('schemaConfidenceBanner');
+    const schemaConfidenceTitle = document.getElementById('schemaConfidenceTitle');
+    const schemaConfidenceCopy = document.getElementById('schemaConfidenceCopy');
+    const codebookFileInput = document.getElementById('codebookFileInput');
+    const applyCodebookButton = document.getElementById('applyCodebookButton');
+    const labelUpgradeStatus = document.getElementById('labelUpgradeStatus');
+    const recommendedRenamePanel = document.getElementById('recommendedRenamePanel');
 
     function escapeHtml(value) {
       return String(value ?? '')
@@ -545,6 +637,90 @@
       return issues;
     }
 
+    function inferredExcludedColumns() {
+      if ((recommendationState.excluded || []).length) {
+        return recommendationState.excluded;
+      }
+      const selected = new Set(currentPredictorSelections());
+      const target = targetColumnSelect.value;
+      return allDisplayColumns()
+        .filter((name) => name !== target && !selected.has(name))
+        .map((name) => ({ name, reasons: [], reason_labels: [] }));
+    }
+
+    function recommendationConfidenceState(excludedCount) {
+      if (recommendationState.confidence) return recommendationState.confidence;
+      const outcome = targetColumnSelect.value;
+      const predictors = currentPredictorSelections();
+      if (!outcome || predictors.length === 0) return 'low';
+      if (predictors.length >= 5) return 'high';
+      if (predictors.length >= 2 || excludedCount > 0) return 'medium';
+      return 'low';
+    }
+
+    function renderSchemaConfidenceBanner(confidence) {
+      const clarity = recommendationState.schema_clarity || 'described';
+      schemaConfidenceBanner.className = `schema-banner schema-banner-${clarity} schema-banner-${confidence}`;
+      if (clarity === 'codes_only' && confidence === 'low') {
+        schemaConfidenceTitle.textContent = 'Needs clarification';
+        schemaConfidenceCopy.textContent = 'This file appears to use code-style field names, and the recommendation confidence is low. Confirm the outcome and improve labels before running.';
+        return;
+      }
+      if (clarity === 'codes_only') {
+        schemaConfidenceTitle.textContent = 'Code-style fields detected';
+        schemaConfidenceCopy.textContent = 'This file looks like it uses variable codes instead of descriptive question text. Tundralis can still recommend a setup, but you may want to upload a codebook or rename key fields.';
+        return;
+      }
+      schemaConfidenceTitle.textContent = 'Descriptive labels detected';
+      schemaConfidenceCopy.textContent = 'This file appears to include readable field names or enough signal to support a confident recommendation.';
+    }
+
+    function renderRecommendationSummary() {
+      const outcome = targetColumnSelect.value || recommendationState.target || '—';
+      const predictors = currentPredictorSelections();
+      const excluded = inferredExcludedColumns();
+      const usableRows = recommendationState.usable_rows ?? columnProfiles[targetColumnSelect.value]?.non_null_count;
+      const confidence = recommendationConfidenceState(excluded.length);
+
+      recommendationOutcome.textContent = outcome;
+      recommendationDriverCount.textContent = `${predictors.length} selected`;
+      recommendationExcludedCount.textContent = `${excluded.length} excluded`;
+      recommendationUsableRows.textContent = Number.isFinite(usableRows) ? String(usableRows) : '—';
+
+      if (confidence === 'high') {
+        recommendationStatus.textContent = 'Recommended setup is ready';
+      } else if (confidence === 'medium') {
+        recommendationStatus.textContent = 'Review suggested setup';
+      } else {
+        recommendationStatus.textContent = 'We need your input';
+      }
+      renderSchemaConfidenceBanner(confidence);
+
+      const exclusionReasonCounts = {};
+      excluded.forEach((item) => (item.reason_labels || []).forEach((reason) => {
+        exclusionReasonCounts[reason] = (exclusionReasonCounts[reason] || 0) + 1;
+      }));
+      const reasonSummary = Object.entries(exclusionReasonCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4)
+        .map(([reason, count]) => `${reason} (${count})`)
+        .join(', ');
+
+      recommendationExplanation.textContent = `Tundralis selected ${predictors.length} candidate driver field${predictors.length === 1 ? '' : 's'} and excluded ${excluded.length} field${excluded.length === 1 ? '' : 's'} based on profile signals like IDs, open text, metadata, and system fields${reasonSummary ? `: ${reasonSummary}.` : '.'}`;
+
+      const rankedOutcomes = recommendationState.outcome_candidates || [];
+      const alternativeOutcomes = rankedOutcomes.filter((item) => item.name !== outcome).slice(0, 3);
+      schemaHint.textContent = recommendationState.schema_clarity === 'codes_only'
+        ? 'This file appears to use code-style column names without descriptive question text. Tundralis can still recommend a setup, but users may need to confirm labels more often.'
+        : '';
+      recommendationDetailsPanel.innerHTML = `
+        <div><strong>Outcome</strong><div class="sub small">Recommended: ${escapeHtml(outcome)}</div>${alternativeOutcomes.length ? `<div class="sub small">Also considered: ${alternativeOutcomes.map((item) => `${escapeHtml(item.name)} (${item.score})`).join(', ')}</div>` : ''}</div>
+        <div><strong>Drivers</strong><div class="sub small">${predictors.length} selected for modeling out of ${recommendationState.driver_pool_count || predictors.length} viable candidates. Default shortlist limit: ${recommendationState.driver_shortlist_limit || predictors.length}.</div></div>
+        <div><strong>Excluded fields</strong><div class="sub small">${excluded.length ? excluded.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'None excluded yet.'}</div></div>
+      `;
+      renderRecommendedRenamePanel();
+    }
+
     function updateConfirmationPanel() {
       const predictors = currentPredictorSelections();
       confirmOutcome.textContent = targetColumnSelect.value || '—';
@@ -553,13 +729,14 @@
       confirmSegmentCount.textContent = savedSegmentDefs.length;
       confirmPredictorList.innerHTML = predictors.length
         ? predictors.map((name) => `<div class="mono">${escapeHtml(name)}</div>`).join('')
-        : '<div class="empty-state compact">No predictors selected yet.</div>';
+        : '<div class="empty-state compact">No drivers selected yet.</div>';
       confirmRecodeList.innerHTML = savedRecodesState.length
         ? savedRecodesState.map((recode) => `<div><strong>${escapeHtml(recode.output_column)}</strong><div class="sub small">${escapeHtml(recode.source_column)} · ${escapeHtml(recode.type)}</div></div>`).join('')
-        : '<div class="empty-state compact">No transforms saved.</div>';
+        : '<div class="empty-state compact">No adjustments saved.</div>';
       confirmSegmentList.innerHTML = savedSegmentDefs.length
         ? savedSegmentDefs.map((segment) => `<div><strong>${escapeHtml(segment.name)}</strong></div>`).join('')
         : '<div class="empty-state compact">No segments saved.</div>';
+      renderRecommendationSummary();
       updateStepAvailability();
     }
 
@@ -591,6 +768,7 @@
     }
 
     function clearRecodeDraft() {
+      editingRecodeIndex = null;
       recodeSourceSelector.setValue('');
       recodeType.value = '';
       recodeOutputColumn.value = '';
@@ -609,8 +787,103 @@
       updateStepAvailability();
     }
 
+    function defaultMapRulesForColumn(columnName) {
+      const profile = columnProfiles[columnName] || {};
+      const topValues = (profile.top_values || []).map((row) => String(row.value ?? '').trim()).filter(Boolean);
+      const uniqueValues = [...new Set(topValues)];
+      return uniqueValues.slice(0, 6).map((value) => ({ from: value, to: value }));
+    }
+
+    function defaultBucketRulesForColumn(columnName) {
+      const summary = columnProfiles[columnName]?.numeric_summary;
+      if (!summary) return [];
+      const min = Number(summary.min);
+      const max = Number(summary.max);
+      if (!Number.isFinite(min) || !Number.isFinite(max)) return [];
+      if (min === max) {
+        return [{ min: '', max: '', label: `Value ${min}` }];
+      }
+      const step = (max - min) / 3;
+      const first = Number((min + step).toFixed(2));
+      const second = Number((min + (step * 2)).toFixed(2));
+      return [
+        { min: '', max: first, label: 'Low' },
+        { min: first, max: second, label: 'Medium' },
+        { min: second, max: '', label: 'High' },
+      ];
+    }
+
+    function seedDraftRulesForType(type, sourceColumn) {
+      if (type === 'map_values' && !draftMapRules.length) {
+        draftMapRules = defaultMapRulesForColumn(sourceColumn);
+      }
+      if (type === 'bucket_numeric' && !draftBucketRules.length) {
+        draftBucketRules = defaultBucketRulesForColumn(sourceColumn);
+      }
+    }
+
+    function buildDraftRecodeDefinition() {
+      if (!recodeDraftReady()) {
+        throw new Error('Choose a source column, transform type, and new column name first.');
+      }
+      const outputColumn = selectedRecodeOutputName();
+      if (savedRecodesState.some((item, idx) => item.output_column === outputColumn && idx !== editingRecodeIndex)) {
+        throw new Error(`A transform named '${outputColumn}' already exists.`);
+      }
+
+      seedDraftRulesForType(recodeType.value, recodeSourceColumn.value);
+
+      if (recodeType.value === 'map_values') {
+        return {
+          type: 'map_values',
+          source_column: recodeSourceColumn.value,
+          output_column: outputColumn,
+          mapping: Object.fromEntries(draftMapRules.filter((row) => row.from && row.to).map((row) => [row.from, row.to])),
+        };
+      }
+
+      if (recodeType.value === 'bucket_numeric') {
+        return {
+          type: 'bucket_numeric',
+          source_column: recodeSourceColumn.value,
+          output_column: outputColumn,
+          bins: draftBucketRules.filter((row) => row.label).map((row) => ({
+            min: row.min === '' ? null : Number(row.min),
+            max: row.max === '' ? null : Number(row.max),
+            label: row.label,
+            include_min: true,
+            include_max: true,
+          })),
+        };
+      }
+
+      if (recodeType.value === 'boolean_flag') {
+        return {
+          type: 'boolean_flag',
+          source_column: recodeSourceColumn.value,
+          output_column: outputColumn,
+          operator: flagOperator.value || 'equals',
+          value: flagValue.value.trim(),
+        };
+      }
+
+      throw new Error('Choose a transform type first.');
+    }
+
     function warningLabel(warning) {
-      return warning.replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+      const labels = {
+        likely_identifier: 'Likely ID',
+        high_cardinality: 'High cardinality',
+        high_missingness: 'High missingness',
+        mixed_numeric_text: 'Mixed numeric/text',
+        likely_likert_or_coded_categorical: 'Likely survey scale',
+        text: 'Open text',
+        categorical: 'Categorical field',
+        admin: 'Administrative field',
+        derived_target: 'Derived from outcome',
+        target: 'Selected outcome',
+      };
+      return labels[warning] || warning.replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
     }
 
     function allDisplayColumns() {
@@ -618,7 +891,41 @@
     }
 
     function currentPredictorSelections() {
-      return Array.from(document.querySelectorAll('input[name="predictor_columns"]:checked')).map((el) => el.value);
+      const selected = Array.from(document.querySelectorAll('input[name="predictor_columns"]:checked')).map((el) => el.value);
+      return selected.length ? selected : savedPredictorSelections.filter((name) => allDisplayColumns().includes(name));
+    }
+
+    function displayNameValue(columnName) {
+      return savedDisplayNameMap[columnName] || columnName || '';
+    }
+
+    function recommendedRenameFields() {
+      const outcome = recommendationState.target ? [recommendationState.target] : [];
+      const drivers = (recommendationState.predictors || []).slice(0, 8).map((item) => item.name);
+      return Array.from(new Set([...outcome, ...drivers]));
+    }
+
+    function renderRecommendedRenamePanel() {
+      const fields = recommendedRenameFields();
+      recommendedRenamePanel.innerHTML = fields.length
+        ? fields.map((name) => `
+            <label class="rename-row">
+              <span class="mono">${escapeHtml(name)}</span>
+              <input type="text" name="display_name__${escapeHtml(name)}" placeholder="Optional display label" value="${escapeHtml(displayNameValue(name))}">
+            </label>
+          `).join('')
+        : '<div class="sub small">No recommended fields yet.</div>';
+    }
+
+    async function ensureColumnProfile(columnName) {
+      if (!columnName || columnProfiles[columnName]) return columnProfiles[columnName];
+      const response = await fetch(`/mapping/${encodeURIComponent(jobId)}/profile?column=${encodeURIComponent(columnName)}`);
+      if (!response.ok) return null;
+      const payload = await response.json().catch(() => ({}));
+      if (payload.profile) {
+        columnProfiles[columnName] = payload.profile;
+      }
+      return columnProfiles[columnName] || null;
     }
 
     function filterSegmentColumnOptions() {
@@ -636,7 +943,7 @@
     function rebuildTargetDisplayInput() {
       const target = targetColumnSelect.value || currentTarget || '';
       targetDisplayNameContainer.innerHTML = target
-        ? `<input type="text" name="display_name__${escapeHtml(target)}" placeholder="Optional display label" value="${escapeHtml(target)}">`
+        ? `<input type="text" name="display_name__${escapeHtml(target)}" placeholder="Optional display label" value="${escapeHtml(displayNameValue(target))}">`
         : '<div class="empty-state compact">No numeric outcome available.</div>';
       inspectOutcomeButton.textContent = target || '—';
       inspectOutcomeButton.dataset.columnName = target;
@@ -796,15 +1103,23 @@
 
     const recodeSourceSelector = buildSearchableColumnSelector(recodeSourceColumnSelector, {
       inputEl: recodeSourceColumn,
-      placeholder: 'Select Column',
+      placeholder: 'Select field',
       getOptions: () => allDisplayColumns(),
       onChange: (value) => { updateRecodeDraftUi(); renderSavedRecodes(); renderInspector(value || targetColumnSelect.value); }
     });
 
+    function rebuildRecodeSourceOptions() {
+      recodeSourceSelector.sync();
+    }
+
     function predictorCandidates() {
+      const recommended = recommendationState.predictors || [];
+      if (recommended.length) {
+        return recommended.filter((item) => item.name !== targetColumnSelect.value);
+      }
       return allDisplayColumns()
         .filter((col) => col !== targetColumnSelect.value)
-        .map((col) => ({ name: col, kind: (columnProfiles[col]?.inferred_type || '').includes('numeric') ? 'numeric' : 'categorical' }));
+        .map((col) => ({ name: col, kind: (columnProfiles[col]?.inferred_type || '').includes('numeric') ? 'numeric' : 'categorical', warnings: columnProfiles[col]?.warnings || [], reasons: [] }));
     }
 
     function rebuildTargetOptions() {
@@ -821,12 +1136,14 @@
 
     function rebuildPredictorUI() {
       const selected = new Set(currentPredictorSelections());
+      savedPredictorSelections = Array.from(selected);
       const candidates = predictorCandidates();
       predictorPicker.innerHTML = candidates.map((item) => `
         <label class="picker-item js-inspect-column" data-col="${escapeHtml(item.name.toLowerCase())}" data-column-name="${escapeHtml(item.name)}">
           <input type="checkbox" name="predictor_columns" value="${escapeHtml(item.name)}" ${selected.has(item.name) ? 'checked' : ''}>
           <span class="mono">${escapeHtml(item.name)}</span>
           <span class="pill ${item.kind}">${item.kind}</span>
+          ${(item.warnings || []).includes('likely_likert_or_coded_categorical') ? '<span class="warning-pill">Survey scale</span>' : ''}
         </label>`).join('');
 
       const selectedNames = currentPredictorSelections();
@@ -840,7 +1157,7 @@
                   <span class="pill ${kind}">${kind}</span>
                 </div>
                 <label class="field-label small">Display name in report</label>
-                <input type="text" name="display_name__${escapeHtml(name)}" placeholder="Optional display label" value="${escapeHtml(name)}">
+                <input type="text" name="display_name__${escapeHtml(name)}" placeholder="Optional display label" value="${escapeHtml(displayNameValue(name))}">
                 ${kind !== 'numeric' ? '<div class="segment-builder-note">This column is non-numeric. Recode it before modeling if needed.</div>' : ''}
               </div>`;
           }).join('')
@@ -857,6 +1174,8 @@
       segmentRuleColumn.innerHTML = allDisplayColumns().map((col) => `<option value="${escapeHtml(col)}">${escapeHtml(col)}</option>`).join('');
       if (allDisplayColumns().includes(previous)) {
         segmentRuleColumn.value = previous;
+      } else if (allDisplayColumns().includes(savedSegmentColumnsState[0])) {
+        segmentRuleColumn.value = savedSegmentColumnsState[0];
       }
       syncSegmentOperatorOptions(segmentRuleColumn.value);
       filterSegmentColumnOptions();
@@ -1063,7 +1382,7 @@
     function renderSavedRecodes() {
       savedRecodes.innerHTML = savedRecodesState.length ? '' : '<div class="empty-state">No transforms yet.</div>';
       savedRecodesState.forEach((recode, idx) => {
-        const isActive = recodeDraftReady() && recode.output_column === selectedRecodeOutputName();
+        const isActive = editingRecodeIndex === idx;
         const panelId = `recodePanel_${idx}`;
         const el = document.createElement('div');
         el.className = 'selected-item recode-card';
@@ -1074,7 +1393,8 @@
               <div class="sub small">${escapeHtml(recode.source_column)} → ${escapeHtml(recode.type)}</div>
             </div>
             <div class="inline-actions">
-              <button type="button" class="recode-toggle-button ${isActive ? 'active' : ''}" data-toggle-recode="${idx}" aria-label="${isActive ? 'Cancel transform' : 'Edit transform'}">${isActive ? '−' : '+'}</button>
+              <button type="button" class="button-link secondary" data-edit-recode="${idx}">${isActive ? 'Cancel' : 'Edit'}</button>
+              <button type="button" class="button-link secondary" data-remove-recode="${idx}">Remove</button>
             </div>
           </div>
           <div class="recode-builder-stack ${isActive ? '' : 'hidden'}" id="${panelId}">
@@ -1125,28 +1445,43 @@
             const wrap = document.getElementById(`mapRuleDraft_${idx}`);
             wrap.innerHTML = draftMapRules.length ? '' : '<div class="empty-state compact">No mapping rows yet.</div>';
             draftMapRules.forEach((rule, ridx) => {
-              wrap.innerHTML += `<div class="selected-item"><div class="selected-item-head"><span>${escapeHtml(rule.from)} → ${escapeHtml(rule.to)}</span><button type="button" class="button-link secondary" data-remove-map="${ridx}">Remove</button></div></div>`;
+              wrap.innerHTML += `
+                <div class="selected-item">
+                  <div class="field-grid three compact">
+                    <div><input type="text" id="mapFromExisting_${idx}_${ridx}" placeholder="From value" value="${escapeHtml(rule.from || '')}"></div>
+                    <div><input type="text" id="mapToExisting_${idx}_${ridx}" placeholder="To value" value="${escapeHtml(rule.to || '')}"></div>
+                    <div><button type="button" class="button-link secondary" data-remove-map="${ridx}">Remove</button></div>
+                  </div>
+                </div>`;
             });
           } else if (recode.type === 'bucket_numeric') {
             const wrap = document.getElementById(`bucketRuleDraft_${idx}`);
             wrap.innerHTML = draftBucketRules.length ? '' : '<div class="empty-state compact">No bucket rows yet.</div>';
             draftBucketRules.forEach((rule, ridx) => {
-              const minLabel = rule.min === '' ? '-∞' : rule.min;
-              const maxLabel = rule.max === '' ? '+∞' : rule.max;
-              wrap.innerHTML += `<div class="selected-item"><div class="selected-item-head"><span>${escapeHtml(rule.label)}: ${escapeHtml(minLabel)} to ${escapeHtml(maxLabel)}</span><button type="button" class="button-link secondary" data-remove-bucket="${ridx}">Remove</button></div></div>`;
+              wrap.innerHTML += `
+                <div class="selected-item">
+                  <div class="field-grid four compact">
+                    <div><input type="text" id="bucketMinExisting_${idx}_${ridx}" placeholder="Min" value="${escapeHtml(rule.min ?? '')}"></div>
+                    <div><input type="text" id="bucketMaxExisting_${idx}_${ridx}" placeholder="Max" value="${escapeHtml(rule.max ?? '')}"></div>
+                    <div><input type="text" id="bucketLabelExisting_${idx}_${ridx}" placeholder="Label" value="${escapeHtml(rule.label || '')}"></div>
+                    <div><button type="button" class="button-link secondary" data-remove-bucket="${ridx}">Remove</button></div>
+                  </div>
+                </div>`;
             });
           }
         }
       });
       bindColumnInspectorTriggers();
-      document.querySelectorAll('[data-toggle-recode]').forEach((btn) => btn.addEventListener('click', async () => {
-        const idx = Number(btn.dataset.toggleRecode);
+      document.querySelectorAll('[data-edit-recode]').forEach((btn) => btn.addEventListener('click', () => {
+        const idx = Number(btn.dataset.editRecode);
         const recode = savedRecodesState[idx];
-        if (recodeDraftReady() && selectedRecodeOutputName() === recode.output_column) {
+        if (editingRecodeIndex === idx) {
           clearRecodeDraft();
           renderSavedRecodes();
+          setStatus(recodeBuilderStatus, '', 'info');
           return;
         }
+        editingRecodeIndex = idx;
         recodeSourceSelector.setValue(recode.source_column);
         recodeType.value = recode.type;
         recodeOutputColumn.value = recode.output_column;
@@ -1157,6 +1492,27 @@
         updateRecodeDraftUi();
         renderSavedRecodes();
         renderInspector(recode.source_column);
+      }));
+      document.querySelectorAll('[data-remove-recode]').forEach((btn) => btn.addEventListener('click', async () => {
+        const idx = Number(btn.dataset.removeRecode);
+        const [removed] = savedRecodesState.splice(idx, 1);
+        if (editingRecodeIndex === idx) {
+          clearRecodeDraft();
+        } else if (editingRecodeIndex !== null && editingRecodeIndex > idx) {
+          editingRecodeIndex -= 1;
+        }
+        recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+        renderSavedRecodes();
+        updateConfirmationPanel();
+        const ok = await refreshPrepPreview();
+        if (!ok) {
+          savedRecodesState.splice(idx, 0, removed);
+          recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+          renderSavedRecodes();
+          updateConfirmationPanel();
+          return;
+        }
+        setStatus(recodeBuilderStatus, `Removed transform '${removed.output_column}'.`, 'success');
       }));
       document.querySelectorAll('[data-add-map]').forEach((btn) => btn.addEventListener('click', async () => {
         const idx = Number(btn.dataset.addMap);
@@ -1179,18 +1535,41 @@
         recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
         await refreshPrepPreview();
       }));
-      document.querySelectorAll('[data-remove-map]').forEach((btn) => btn.addEventListener('click', async () => {
-        draftMapRules.splice(Number(btn.dataset.removeMap), 1);
-        const idx = savedRecodesState.findIndex((item) => item.output_column === selectedRecodeOutputName());
-        if (idx >= 0) savedRecodesState[idx].mapping = Object.fromEntries(draftMapRules.map((row) => [row.from, row.to]));
+      savedRecodes.querySelectorAll('[id^="mapFromExisting_"], [id^="mapToExisting_"]').forEach((el) => el.addEventListener('change', async () => {
+        const [, idx, ridx] = el.id.split('_').slice(-3);
+        draftMapRules[Number(ridx)] = {
+          from: document.getElementById(`mapFromExisting_${idx}_${ridx}`).value.trim(),
+          to: document.getElementById(`mapToExisting_${idx}_${ridx}`).value.trim(),
+        };
+        savedRecodesState[Number(idx)].mapping = Object.fromEntries(draftMapRules.filter((row) => row.from && row.to).map((row) => [row.from, row.to]));
         recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
         await refreshPrepPreview();
       }));
-      document.querySelectorAll('[data-remove-bucket]').forEach((btn) => btn.addEventListener('click', async () => {
-        draftBucketRules.splice(Number(btn.dataset.removeBucket), 1);
-        const idx = savedRecodesState.findIndex((item) => item.output_column === selectedRecodeOutputName());
-        if (idx >= 0) savedRecodesState[idx].bins = draftBucketRules.map((row) => ({ min: row.min === '' ? null : Number(row.min), max: row.max === '' ? null : Number(row.max), label: row.label, include_min: true, include_max: true }));
+      savedRecodes.querySelectorAll('[id^="bucketMinExisting_"], [id^="bucketMaxExisting_"], [id^="bucketLabelExisting_"]').forEach((el) => el.addEventListener('change', async () => {
+        const [, idx, ridx] = el.id.split('_').slice(-3);
+        draftBucketRules[Number(ridx)] = {
+          min: document.getElementById(`bucketMinExisting_${idx}_${ridx}`).value.trim(),
+          max: document.getElementById(`bucketMaxExisting_${idx}_${ridx}`).value.trim(),
+          label: document.getElementById(`bucketLabelExisting_${idx}_${ridx}`).value.trim(),
+        };
+        savedRecodesState[Number(idx)].bins = draftBucketRules.filter((row) => row.label).map((row) => ({ min: row.min === '' ? null : Number(row.min), max: row.max === '' ? null : Number(row.max), label: row.label, include_min: true, include_max: true }));
         recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+        await refreshPrepPreview();
+      }));
+      savedRecodes.querySelectorAll('[data-remove-map]').forEach((btn) => btn.addEventListener('click', async () => {
+        if (editingRecodeIndex === null) return;
+        draftMapRules.splice(Number(btn.dataset.removeMap), 1);
+        savedRecodesState[editingRecodeIndex].mapping = Object.fromEntries(draftMapRules.filter((row) => row.from && row.to).map((row) => [row.from, row.to]));
+        recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+        renderSavedRecodes();
+        await refreshPrepPreview();
+      }));
+      savedRecodes.querySelectorAll('[data-remove-bucket]').forEach((btn) => btn.addEventListener('click', async () => {
+        if (editingRecodeIndex === null) return;
+        draftBucketRules.splice(Number(btn.dataset.removeBucket), 1);
+        savedRecodesState[editingRecodeIndex].bins = draftBucketRules.filter((row) => row.label).map((row) => ({ min: row.min === '' ? null : Number(row.min), max: row.max === '' ? null : Number(row.max), label: row.label, include_min: true, include_max: true }));
+        recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+        renderSavedRecodes();
         await refreshPrepPreview();
       }));
       savedRecodes.querySelectorAll('[id^="flagOperator_"]').forEach((el) => el.addEventListener('change', async () => {
@@ -1216,8 +1595,8 @@
       renderInspector(recodeSourceColumn.value || targetColumnSelect.value);
     }
 
-    function renderInspector(columnName) {
-      const profile = columnProfiles[columnName];
+    async function renderInspector(columnName) {
+      const profile = await ensureColumnProfile(columnName);
       if (!profile) return;
       document.getElementById('inspectorColumnName').textContent = profile.column;
       const typePill = document.getElementById('inspectorTypePill');
@@ -1259,6 +1638,8 @@
       currentColumns = payload.columns || currentColumns;
       currentNumericColumns = payload.numeric_columns || currentNumericColumns;
       columnProfiles = payload.column_profiles || columnProfiles;
+      recommendationState = payload.recommendation || recommendationState;
+      columnProfilesTrimmed = false;
       savedSegmentDefs = payload.normalized_segment_definitions || savedSegmentDefs;
       segmentDefinitionsInput.value = JSON.stringify(savedSegmentDefs);
       segmentPreviewsState = payload.segment_previews || [];
@@ -1274,13 +1655,23 @@
       renderInspector(inspectorColumnSelect.value || targetColumnSelect.value || allDisplayColumns()[0]);
     }
 
+    function collectDisplayNameMap() {
+      const fields = Array.from(document.querySelectorAll('input[name^="display_name__"]'));
+      return Object.fromEntries(fields.map((field) => [field.name.replace('display_name__', ''), field.value.trim() || field.name.replace('display_name__', '')]));
+    }
+
     async function refreshPrepPreview() {
+      savedDisplayNameMap = collectDisplayNameMap();
       const response = await fetch('/preview', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           job_id: document.querySelector('input[name="job_id"]').value,
           filename: document.querySelector('input[name="filename"]').value,
+          target_column: targetColumnSelect.value,
+          predictor_columns: currentPredictorSelections(),
+          segment_columns: savedSegmentColumnsState,
+          display_name_map: savedDisplayNameMap,
           recode_definitions: savedRecodesState,
           segment_definitions: savedSegmentDefs,
         }),
@@ -1374,6 +1765,45 @@
       }
       setWorkflowTab(tab.dataset.tab);
     }));
+    document.getElementById('toggleRecommendationDetails')?.addEventListener('click', () => {
+      recommendationDetailsPanel.classList.toggle('hidden');
+    });
+    document.getElementById('reviewMappingButton')?.addEventListener('click', () => setWorkflowTab('model'));
+    document.getElementById('openAdjustDataButton')?.addEventListener('click', () => setWorkflowTab('recode'));
+    document.getElementById('openSegmentsButton')?.addEventListener('click', () => setWorkflowTab('segment'));
+    document.getElementById('runRecommendedButton')?.addEventListener('click', () => {
+      updateConfirmationPanel();
+      if (confirmationIssues().length === 0) {
+        document.getElementById('mappingForm')?.requestSubmit(runKdaButton);
+        return;
+      }
+      setWorkflowTab('confirm');
+    });
+    applyCodebookButton?.addEventListener('click', async () => {
+      const file = codebookFileInput?.files?.[0];
+      if (!file) {
+        labelUpgradeStatus.textContent = 'Choose a codebook CSV first.';
+        return;
+      }
+      const form = new FormData();
+      form.append('codebook_file', file);
+      const response = await fetch(`/mapping/${encodeURIComponent(jobId)}/codebook`, {
+        method: 'POST',
+        body: form,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        labelUpgradeStatus.textContent = payload.error || 'Codebook upload failed.';
+        return;
+      }
+      savedDisplayNameMap = payload.display_name_map || savedDisplayNameMap;
+      recommendationState = payload.recommendation || recommendationState;
+      labelUpgradeStatus.textContent = 'Codebook applied.';
+      rebuildTargetDisplayInput();
+      rebuildPredictorUI();
+      renderRecommendedRenamePanel();
+      updateConfirmationPanel();
+    });
     document.getElementById('backToRecodeTab')?.addEventListener('click', () => setWorkflowTab('recode'));
     document.getElementById('goToSegmentTab')?.addEventListener('click', () => setWorkflowTab('segment'));
     document.getElementById('backToModelTab')?.addEventListener('click', () => setWorkflowTab('model'));
@@ -1386,6 +1816,37 @@
     document.getElementById('refreshPrepPreview')?.addEventListener('click', refreshPrepPreview);
     document.getElementById('resetSegmentTree')?.addEventListener('click', () => { segmentTreeState = createEmptyGroup('all'); renderSegmentTree(); });
     document.getElementById('resetSegmentBuilder')?.addEventListener('click', resetSegmentBuilder);
+    launchRecodeBuilder?.addEventListener('click', async () => {
+      try {
+        const recode = buildDraftRecodeDefinition();
+        const priorIndex = editingRecodeIndex;
+        const previousRecode = priorIndex !== null ? savedRecodesState[priorIndex] : null;
+        if (priorIndex !== null) {
+          savedRecodesState[priorIndex] = recode;
+        } else {
+          savedRecodesState.push(recode);
+        }
+        recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+        renderSavedRecodes();
+        updateConfirmationPanel();
+        const ok = await refreshPrepPreview();
+        if (!ok) {
+          if (priorIndex !== null) {
+            savedRecodesState[priorIndex] = previousRecode;
+          } else {
+            savedRecodesState.pop();
+          }
+          recodeDefinitionsInput.value = JSON.stringify(savedRecodesState);
+          renderSavedRecodes();
+          updateConfirmationPanel();
+          return;
+        }
+        clearRecodeDraft();
+        setStatus(recodeBuilderStatus, `${priorIndex !== null ? 'Updated' : 'Created'} transform '${recode.output_column}'.`, 'success');
+      } catch (error) {
+        setStatus(recodeBuilderStatus, error.message || 'Could not save transform.', 'error');
+      }
+    });
     recodeType?.addEventListener('change', () => { updateRecodeDraftUi(); renderSavedRecodes(); renderInspector(recodeSourceColumn.value || targetColumnSelect.value); });
     inspectorColumnSelect?.addEventListener('change', (e) => renderInspector(e.target.value));
     targetColumnSelect?.addEventListener('change', () => {
@@ -1417,6 +1878,7 @@
     rebuildInspectorOptions();
     rebuildRecodeSourceOptions();
     rebuildPredictorUI();
+    renderRecommendedRenamePanel();
     rebuildSegmentColumnsUI();
     renderDraftRules();
     renderSavedSegments();
@@ -1427,6 +1889,7 @@
     syncSegmentOperatorOptions(segmentRuleColumn.value);
     syncInspectorCollapse();
     updateConfirmationPanel();
+    setWorkflowTab('model');
     renderInspector(inspectorColumnSelect.value || targetColumnSelect.value || allDisplayColumns()[0]);
   </script>
 </body>

@@ -2,8 +2,9 @@ import io
 import json
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from tundralis.app import app
+from tundralis.app import INSPECT_ERROR_LOG, app
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,6 +29,29 @@ class TestWebMapping(unittest.TestCase):
         self.assertNotEqual(stored_filename, "Google Policy Measurement Weighted Data (Numeric) Ver 1.0.csv")
         self.assertTrue(stored_filename.endswith("_Google Policy Measurement Weighted Data (Numeric) Ver 1.0.csv"))
 
+    def test_upload_xhr_returns_redirect_url(self):
+        client = app.test_client()
+        csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()
+
+        response = client.post(
+            "/upload",
+            data={"survey_file": (io.BytesIO(csv_bytes), "client_style_kda.csv")},
+            content_type="multipart/form-data",
+            headers={
+                "X-Requested-With": "XMLHttpRequest",
+                "Accept": "application/json",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+        self.assertIn("job_id", payload)
+        self.assertIn("redirect_url", payload)
+        self.assertTrue(payload["redirect_url"].endswith(f"/mapping/{payload['job_id']}"))
+        follow = client.get(payload["redirect_url"])
+        self.assertEqual(follow.status_code, 200)
+        self.assertIn("Run + download", follow.get_data(as_text=True))
+
     def test_inspect_renders_column_inspector(self):
         client = app.test_client()
         csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()
@@ -40,11 +64,11 @@ class TestWebMapping(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
-        self.assertIn("Column inspector", html)
-        self.assertIn("Data shaping", html)
+        self.assertIn("Field inspector", html)
+        self.assertIn("Adjust data setup", html)
         self.assertIn("Analysis setup", html)
-        self.assertIn("Segment builder", html)
-        self.assertIn("Review + run", html)
+        self.assertIn("Segments", html)
+        self.assertIn("Run + download", html)
         self.assertIn("Ready to run", html)
         self.assertIn("toggleInspectorButton", html)
         self.assertIn("segmentColumnSearch", html)
@@ -105,6 +129,117 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn("segment_group", payload["columns"])
         self.assertEqual(payload["segment_previews"][0]["name"], "Enterprise only")
         self.assertGreater(payload["segment_previews"][0]["matched_count"], 0)
+
+    def test_mapping_page_reloads_saved_draft_state(self):
+        client = app.test_client()
+        csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()
+
+        inspect_response = client.post(
+            "/upload",
+            data={"survey_file": (io.BytesIO(csv_bytes), "client_style_kda.csv")},
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+        )
+        payload = inspect_response.get_json()
+        job_id = payload["job_id"]
+        filename = payload["filename"]
+
+        preview_response = client.post(
+            "/preview",
+            json={
+                "job_id": job_id,
+                "filename": filename,
+                "target_column": "overall_sat",
+                "predictor_columns": ["product_quality_score", "ease_use_score"],
+                "display_name_map": {"overall_sat": "Overall satisfaction"},
+                "recode_definitions": [
+                    {
+                        "type": "boolean_flag",
+                        "source_column": "region",
+                        "output_column": "is_apac",
+                        "operator": "equals",
+                        "value": "APAC",
+                    }
+                ],
+                "segment_definitions": [
+                    {
+                        "name": "Enterprise only",
+                        "tree": {"all": [{"column": "segment", "operator": "equals", "value": "Enterprise"}]},
+                    }
+                ],
+            },
+        )
+        self.assertEqual(preview_response.status_code, 200)
+
+        mapping_response = client.get(f"/mapping/{job_id}")
+        self.assertEqual(mapping_response.status_code, 200)
+        html = mapping_response.get_data(as_text=True)
+        self.assertIn('let savedRecodesState = [{', html)
+        self.assertIn('"output_column": "is_apac"', html)
+        self.assertIn('let savedPredictorSelections = ["product_quality_score", "ease_use_score"]', html)
+        self.assertIn('Overall satisfaction', html)
+
+    def test_inspect_failure_returns_error_id_and_logs_traceback(self):
+        client = app.test_client()
+        csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()
+        if INSPECT_ERROR_LOG.exists():
+            INSPECT_ERROR_LOG.unlink()
+
+        response = client.post(
+            "/upload",
+            data={"survey_file": (io.BytesIO(csv_bytes), "client_style_kda.csv")},
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.get_json()
+
+        with patch("tundralis.app.build_prep_bundle", side_effect=ValueError("broken inspect step")):
+            mapping_response = client.get(payload["redirect_url"])
+
+        self.assertEqual(mapping_response.status_code, 500)
+        html = mapping_response.get_data(as_text=True)
+        self.assertIn("Inspect failed", html)
+        self.assertTrue(INSPECT_ERROR_LOG.exists())
+        log_text = INSPECT_ERROR_LOG.read_text(encoding="utf-8")
+        self.assertIn("broken inspect step", log_text)
+
+    def test_mapping_page_includes_recode_create_handler(self):
+        client = app.test_client()
+        csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()
+
+        inspect_response = client.post(
+            "/upload",
+            data={"survey_file": (io.BytesIO(csv_bytes), "client_style_kda.csv")},
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+        )
+        payload = inspect_response.get_json()
+        mapping_response = client.get(payload["redirect_url"])
+        self.assertEqual(mapping_response.status_code, 200)
+        html = mapping_response.get_data(as_text=True)
+        self.assertIn("launchRecodeBuilder?.addEventListener('click'", html)
+        self.assertIn("priorIndex !== null ? 'Updated' : 'Created'", html)
+
+    def test_mapping_page_includes_recode_edit_and_remove_handlers(self):
+        client = app.test_client()
+        csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()
+
+        inspect_response = client.post(
+            "/upload",
+            data={"survey_file": (io.BytesIO(csv_bytes), "client_style_kda.csv")},
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+        )
+        payload = inspect_response.get_json()
+        mapping_response = client.get(payload["redirect_url"])
+        self.assertEqual(mapping_response.status_code, 200)
+        html = mapping_response.get_data(as_text=True)
+        self.assertIn("let editingRecodeIndex = null;", html)
+        self.assertIn("data-edit-recode", html)
+        self.assertIn("data-remove-recode", html)
+        self.assertIn("editingRecodeIndex === idx", html)
+        self.assertIn("Removed transform", html)
 
     def test_preview_rejects_invalid_numeric_operator_on_text_column(self):
         client = app.test_client()

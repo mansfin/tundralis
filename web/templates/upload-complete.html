@@ -1,0 +1,19 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>tundralis · preparing review</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+  <meta http-equiv="refresh" content="0; url={{ redirect_url }}">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero card">
+      <div class="eyebrow">tundralis</div>
+      <h1>Upload complete</h1>
+      <p class="sub">Saved <strong>{{ display_filename }}</strong>. Preparing your recommended setup…</p>
+      <p class="sub small">If nothing happens, <a href="{{ redirect_url }}">open the analysis setup</a>.</p>
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,93 @@
+[
+  {
+    "name": "client_style_kda",
+    "csv": "data/fixtures/client_style_kda.csv",
+    "expected_target": "overall_sat",
+    "must_include": [
+      "product_quality_score",
+      "ease_use_score",
+      "support_experience",
+      "value_for_money"
+    ],
+    "must_exclude": [
+      "response_id",
+      "free_text_comment",
+      "segment",
+      "region",
+      "survey_wave"
+    ],
+    "notes": "Clean described customer satisfaction style export."
+  },
+  {
+    "name": "messy_airline_tracker",
+    "csv": "data/fixtures/messy_airline_tracker.csv",
+    "expected_target": "overall_experience",
+    "must_include": [
+      "checkin_ease",
+      "staff_friendliness",
+      "on_time_departure",
+      "fare_value"
+    ],
+    "must_exclude": [
+      "ResponseId",
+      "StartDate",
+      "zip_code",
+      "Q12.10_16_TEXT",
+      "V1",
+      "V10",
+      "Allegiant",
+      "American",
+      "Delta",
+      "Seg_N",
+      "Q12.3Unfav"
+    ],
+    "notes": "Messy tracker export with airline-brand binary debris, geo fields, text artifacts, and opaque code fields."
+  },
+  {
+    "name": "employee_engagement_messy",
+    "csv": "data/fixtures/employee_engagement_messy.csv",
+    "expected_target": "engagement_index",
+    "must_include": [
+      "manager_support",
+      "growth_opportunities",
+      "recognition_score",
+      "workload_manageable"
+    ],
+    "must_exclude": [
+      "employee_id",
+      "response_uuid",
+      "postal",
+      "comment_text",
+      "Q5_1",
+      "Q5_2",
+      "V11",
+      "department",
+      "survey_wave"
+    ],
+    "notes": "Employee survey export with IDs, open text, postal data, wave metadata, and battery fragments."
+  },
+  {
+    "name": "product_nps_messy",
+    "csv": "data/fixtures/product_nps_messy.csv",
+    "expected_target": "nps_score",
+    "must_include": [
+      "ease_of_use",
+      "feature_completeness",
+      "support_quality",
+      "trust_in_platform"
+    ],
+    "must_exclude": [
+      "respondent_id",
+      "open_end_reason",
+      "country",
+      "state",
+      "Q9.10_16_TEXT",
+      "Q9_1",
+      "Q9_2",
+      "V3",
+      "United",
+      "Spirit"
+    ],
+    "notes": "Messy product/NPS export with country/state metadata, text artifacts, battery codes, and brand-name binary fields."
+  }
+]

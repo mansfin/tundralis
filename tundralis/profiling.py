@@ -10,6 +10,7 @@ LIKERT_MAX_UNIQUE = 11
 HIGH_CARDINALITY_RATIO = 0.5
 IDENTIFIER_UNIQUENESS_RATIO = 0.98
 TOP_VALUE_LIMIT = 8
+PROFILE_SAMPLE_ROWS = 1000
 
 
 def _missing_pct(series: pd.Series) -> float:
@@ -123,5 +124,6 @@ def profile_column(df: pd.DataFrame, column: str) -> dict:
     return profile
 
 
-def profile_dataframe(df: pd.DataFrame) -> dict[str, dict]:
-    return {column: profile_column(df, column) for column in df.columns}
+def profile_dataframe(df: pd.DataFrame, sample_rows: int = PROFILE_SAMPLE_ROWS) -> dict[str, dict]:
+    profile_df = df.head(sample_rows) if sample_rows and len(df) > sample_rows else df
+    return {column: profile_column(profile_df, column) for column in profile_df.columns}

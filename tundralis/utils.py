@@ -32,13 +32,33 @@ def setup_logging(level: str = "INFO") -> None:
     )
 
 
+def _looks_like_qualtrics_raw_export(path: Path) -> bool:
+    try:
+        preview = pd.read_csv(path, header=None, nrows=3, dtype=str, keep_default_na=False)
+    except Exception:
+        return False
+    if preview.shape[0] < 3:
+        return False
+    row2 = [str(value).strip() for value in preview.iloc[1].tolist()]
+    row3 = [str(value).strip() for value in preview.iloc[2].tolist()]
+    has_import_ids = any(value.upper().startswith("QID") or value == "ResponseID" for value in row3 if value)
+    has_question_text = any(value and " " in value for value in row2)
+    return has_import_ids and has_question_text
+
+
 def load_survey_data(path: str | Path) -> pd.DataFrame:
     """Load CSV survey data and return a cleaned DataFrame."""
     path = Path(path)
     if not path.exists():
         raise FileNotFoundError(f"Data file not found: {path}")
 
-    df = pd.read_csv(path)
+    read_kwargs = {}
+    if _looks_like_qualtrics_raw_export(path):
+        read_kwargs["skiprows"] = [1, 2]
+        logger.info("Detected raw Qualtrics export format in %s; skipping question text and import ID rows.", path.name)
+
+    read_kwargs.setdefault("low_memory", False)
+    df = pd.read_csv(path, **read_kwargs)
     logger.info("Loaded %d rows × %d columns from %s", *df.shape, path.name)
     return df
 

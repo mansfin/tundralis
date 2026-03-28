@@ -1,0 +1,6 @@
+QID1,QID2,ResponseId
+Overall satisfaction,Product quality,Response ID
+QID1_TEXT,QID2_TEXT,ResponseID
+5,4,R_001
+6,5,R_002
+7,6,R_003
