@@ -895,8 +895,12 @@
       return selected.length ? selected : savedPredictorSelections.filter((name) => allDisplayColumns().includes(name));
     }
 
+    function recommendedLabelFor(columnName) {
+      return (recommendationState.recommended_labels || {})[columnName] || '';
+    }
+
     function displayNameValue(columnName) {
-      return savedDisplayNameMap[columnName] || columnName || '';
+      return savedDisplayNameMap[columnName] || recommendedLabelFor(columnName) || columnName || '';
     }
 
     function recommendedRenameFields() {
@@ -911,7 +915,7 @@
         ? fields.map((name) => `
             <label class="rename-row">
               <span class="mono">${escapeHtml(name)}</span>
-              <input type="text" name="display_name__${escapeHtml(name)}" placeholder="Optional display label" value="${escapeHtml(displayNameValue(name))}">
+              <input type="text" name="display_name__${escapeHtml(name)}" placeholder="${escapeHtml(recommendedLabelFor(name) || 'Optional display label')}" value="${escapeHtml(displayNameValue(name))}">
             </label>
           `).join('')
         : '<div class="sub small">No recommended fields yet.</div>';
@@ -943,7 +947,7 @@
     function rebuildTargetDisplayInput() {
       const target = targetColumnSelect.value || currentTarget || '';
       targetDisplayNameContainer.innerHTML = target
-        ? `<input type="text" name="display_name__${escapeHtml(target)}" placeholder="Optional display label" value="${escapeHtml(displayNameValue(target))}">`
+        ? `<input type="text" name="display_name__${escapeHtml(target)}" placeholder="${escapeHtml(recommendedLabelFor(target) || 'Optional display label')}" value="${escapeHtml(displayNameValue(target))}">`
         : '<div class="empty-state compact">No numeric outcome available.</div>';
       inspectOutcomeButton.textContent = target || '—';
       inspectOutcomeButton.dataset.columnName = target;
@@ -1157,7 +1161,7 @@
                   <span class="pill ${kind}">${kind}</span>
                 </div>
                 <label class="field-label small">Display name in report</label>
-                <input type="text" name="display_name__${escapeHtml(name)}" placeholder="Optional display label" value="${escapeHtml(displayNameValue(name))}">
+                <input type="text" name="display_name__${escapeHtml(name)}" placeholder="${escapeHtml(recommendedLabelFor(name) || 'Optional display label')}" value="${escapeHtml(displayNameValue(name))}">
                 ${kind !== 'numeric' ? '<div class="segment-builder-note">This column is non-numeric. Recode it before modeling if needed.</div>' : ''}
               </div>`;
           }).join('')

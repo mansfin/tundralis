@@ -130,6 +130,38 @@ def _semantic_text(column: str, profile: dict) -> str:
     return str(profile.get("semantic_text") or profile.get("question_text") or column).lower()
 
 
+def _clean_label_text(text: str | None) -> str:
+    value = str(text or "").strip()
+    if not value:
+        return ""
+    value = re.sub(r'\s+', ' ', value)
+    value = re.sub(r'^[QSV]\d+(?:\.\d+)?\s*[\-:|]?\s*', '', value, flags=re.IGNORECASE)
+    value = re.sub(r'\b(importid|question text|display order|selected choice|choice order)\b.*$', '', value, flags=re.IGNORECASE)
+    value = value.strip(' -|:_')
+    return value.strip()
+
+
+def _recommended_display_label(column: str, profile: dict) -> str | None:
+    question_text = _clean_label_text(profile.get("question_text"))
+    semantic_text = _clean_label_text(profile.get("semantic_text"))
+    inferred_type = profile.get("inferred_type", "")
+
+    candidates = [question_text, semantic_text]
+    for candidate in candidates:
+        if not candidate:
+            continue
+        lower = candidate.lower()
+        if lower == column.lower():
+            continue
+        if _looks_like_vendor_plumbing(candidate) or _looks_like_choice_order_artifact(candidate):
+            continue
+        if len(candidate) < 6:
+            continue
+        if inferred_type in {"numeric", "numeric_like_text", "categorical"}:
+            return candidate
+    return None
+
+
 def _looks_like_descriptive_construct(column: str, profile: dict) -> bool:
     lower = _semantic_text(column, profile)
     inferred_type = profile.get("inferred_type", "")
@@ -505,6 +537,8 @@ def _build_recommendation(columns: list[str], column_profiles: dict[str, dict], 
             "reasons": reasons,
             "reason_labels": [EXCLUSION_REASON_LABELS.get(reason, reason.replace('_', ' ')) for reason in reasons],
             "score": round(score, 2),
+            "recommended_label": _recommended_display_label(col, profile),
+            "question_text": profile.get("question_text"),
         }
         if include:
             predictor_pool.append(item)
@@ -581,11 +615,22 @@ def _build_recommendation(columns: list[str], column_profiles: dict[str, dict], 
     if (not target) or top_outcome_score < 8:
         schema_clarity = "codes_only"
 
+    recommended_labels = {}
+    for item in [*predictors, *meta_candidates[:12], *excluded]:
+        label = item.get("recommended_label")
+        if label:
+            recommended_labels[item["name"]] = label
+    if target and target in column_profiles:
+        target_label = _recommended_display_label(target, column_profiles.get(target, {}))
+        if target_label:
+            recommended_labels[target] = target_label
+
     return {
         "target": target,
         "predictors": predictors,
         "excluded": excluded,
         "meta_candidates": meta_candidates[:12],
+        "recommended_labels": recommended_labels,
         "usable_rows": usable_rows,
         "confidence": confidence,
         "outcome_candidates": outcome_candidates[:5],
