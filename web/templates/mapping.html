@@ -1072,6 +1072,7 @@
         ? `Maintain readable labels for ${profile.column}. Saved output column: ${outputName}`
         : `Create a readable label helper for ${profile.column}. Output column: ${outputName}`;
       const rows = suggestedMappingRows(profile.column);
+      const helperInSegments = savedSegmentColumnsState.includes(outputName);
       codedCategoryHelperPanel.innerHTML = `
         <div class="sub small">Map common code values to human-readable labels. This saves a standard value-mapping transform and makes the new labeled column available for segmentation and review.</div>
         <div class="selected-package">
@@ -1085,10 +1086,23 @@
             </div>
           `).join('') : '<div class="empty-state compact">No top values available to seed labels.</div>'}
         </div>
-        <div class="actions"><button type="button" class="button-link secondary" id="saveCodedCategoryMapping">Save coded-category labels</button></div>
+        <div class="actions">
+          <button type="button" class="button-link secondary" id="saveCodedCategoryMapping">Save coded-category labels</button>
+          <button type="button" class="button-link secondary" id="promoteCodedCategorySegment">${helperInSegments ? 'Added to segment columns' : 'Use labeled helper in segments'}</button>
+        </div>
       `;
       document.getElementById('saveCodedCategoryMapping')?.addEventListener('click', async () => {
         await saveCodedCategoryMapping(profile.column);
+      });
+      document.getElementById('promoteCodedCategorySegment')?.addEventListener('click', async () => {
+        if (!savedSegmentColumnsState.includes(outputName)) {
+          savedSegmentColumnsState = [outputName, ...savedSegmentColumnsState.filter((col) => col !== outputName)];
+        }
+        rebuildSegmentColumnsUI();
+        segmentRuleColumn.value = outputName;
+        syncSegmentOperatorOptions(outputName);
+        setStatus(segmentBuilderStatus, `Segment builder now prefers '${outputName}'.`, 'success');
+        setWorkflowTab('segment');
       });
     }
 
@@ -1106,6 +1120,18 @@
 
     function allDisplayColumns() {
       return currentColumns.filter(Boolean);
+    }
+
+    function helperLabelColumns() {
+      return savedRecodesState
+        .filter((item) => item.type === 'map_values' && item.output_column && currentColumns.includes(item.output_column))
+        .map((item) => item.output_column);
+    }
+
+    function preferredSegmentColumns() {
+      const helpers = helperLabelColumns();
+      const remaining = allDisplayColumns().filter((col) => !helpers.includes(col));
+      return [...helpers, ...remaining];
     }
 
     function currentPredictorSelections() {
@@ -1402,10 +1428,14 @@
 
     function rebuildSegmentColumnsUI() {
       const previous = segmentRuleColumn.value;
-      segmentRuleColumn.innerHTML = allDisplayColumns().map((col) => `<option value="${escapeHtml(col)}">${escapeHtml(col)}</option>`).join('');
-      if (allDisplayColumns().includes(previous)) {
+      const preferred = preferredSegmentColumns();
+      segmentRuleColumn.innerHTML = preferred.map((col) => {
+        const helperBadge = helperLabelColumns().includes(col) ? ' (labeled helper)' : '';
+        return `<option value="${escapeHtml(col)}">${escapeHtml(col + helperBadge)}</option>`;
+      }).join('');
+      if (preferred.includes(previous)) {
         segmentRuleColumn.value = previous;
-      } else if (allDisplayColumns().includes(savedSegmentColumnsState[0])) {
+      } else if (preferred.includes(savedSegmentColumnsState[0])) {
         segmentRuleColumn.value = savedSegmentColumnsState[0];
       }
       syncSegmentOperatorOptions(segmentRuleColumn.value);
