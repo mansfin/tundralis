@@ -45,6 +45,18 @@ Current intended variables:
 - `TUNDRALIS_BASIC_AUTH_USER`
 - `TUNDRALIS_BASIC_AUTH_PASS`
 
+Helper:
+
+```bash
+./scripts/load-local-secrets.sh <command>
+```
+
+Example:
+
+```bash
+./scripts/load-local-secrets.sh env | grep TUNDRALIS_BASIC_AUTH
+```
+
 Do not store these in `MEMORY.md`, Slack notes, or committed files.
 
 ### 2. Generate sample data (optional)
