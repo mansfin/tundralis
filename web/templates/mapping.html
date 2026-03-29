@@ -258,6 +258,13 @@
                       </div>
                     </div>
 
+                    <div class="selected-item hidden" id="segmentValueSuggestionCard">
+                      <div class="selected-item-head">
+                        <span>Suggested values</span>
+                        <span class="sub small" id="segmentValueSuggestionCopy">Pick a common value to speed up the rule.</span>
+                      </div>
+                      <div class="inline-actions" id="segmentValueSuggestionList"></div>
+                    </div>
 
                     <div id="segmentBuilderStatus" class="empty-state compact hidden"></div>
 
@@ -578,6 +585,9 @@
     const segmentRuleColumn = document.getElementById('segmentRuleColumn');
     const segmentRuleOperator = document.getElementById('segmentRuleOperator');
     const segmentRuleValue = document.getElementById('segmentRuleValue');
+    const segmentValueSuggestionCard = document.getElementById('segmentValueSuggestionCard');
+    const segmentValueSuggestionCopy = document.getElementById('segmentValueSuggestionCopy');
+    const segmentValueSuggestionList = document.getElementById('segmentValueSuggestionList');
     const segmentTreeCanvas = document.getElementById('segmentTreeCanvas');
     const segmentBuilderStatus = document.getElementById('segmentBuilderStatus');
     const recodeBuilderStatus = document.getElementById('recodeBuilderStatus');
@@ -1058,19 +1068,36 @@
       }
     }
 
-    function suggestSegmentFromLabeledHelper(columnName) {
-      const outputName = codedCategoryOutputName(columnName);
+    function labeledHelperSuggestions(columnName) {
       const helper = existingCodedCategoryRecode(columnName);
-      const labels = Object.values(helper?.mapping || {}).map((value) => String(value).trim()).filter(Boolean);
+      const outputName = codedCategoryOutputName(columnName);
+      const entries = Object.entries(helper?.mapping || {})
+        .map(([from, to]) => ({ from: String(from).trim(), label: String(to).trim(), column: outputName }))
+        .filter((row) => row.from && row.label);
+      const deduped = [];
+      const seen = new Set();
+      entries.forEach((row) => {
+        const key = `${row.column}__${row.label}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          deduped.push(row);
+        }
+      });
+      return deduped;
+    }
+
+    function suggestSegmentFromLabeledHelper(columnName, preferredLabel = '') {
+      const outputName = codedCategoryOutputName(columnName);
+      const labels = labeledHelperSuggestions(columnName);
       if (!labels.length) {
         setStatus(segmentBuilderStatus, `Save at least one readable label for '${outputName}' before creating a starter segment.`, 'error');
         return;
       }
-      const label = labels[0];
-      const segmentNameValue = `${outputName}: ${label}`;
+      const selected = labels.find((item) => item.label === preferredLabel) || labels[0];
+      const segmentNameValue = `${outputName}: ${selected.label}`;
       const draft = {
         name: segmentNameValue,
-        tree: { all: [{ column: outputName, operator: 'equals', value: label }] },
+        tree: { all: [{ column: outputName, operator: 'equals', value: selected.label }] },
       };
       segmentName.value = segmentNameValue;
       segmentTreeState = treeNodeFromBackend(draft.tree);
@@ -1080,8 +1107,10 @@
       rebuildSegmentColumnsUI();
       segmentRuleColumn.value = outputName;
       syncSegmentOperatorOptions(outputName);
+      segmentRuleValue.value = selected.label;
       renderSegmentTree();
-      setStatus(segmentBuilderStatus, `Starter segment drafted from '${outputName}' using label '${label}'.`, 'success');
+      renderSegmentValueSuggestions(outputName);
+      setStatus(segmentBuilderStatus, `Starter segment drafted from '${outputName}' using label '${selected.label}'.`, 'success');
       setWorkflowTab('segment');
     }
 
@@ -1100,6 +1129,7 @@
         : `Create a readable label helper for ${profile.column}. Output column: ${outputName}`;
       const rows = suggestedMappingRows(profile.column);
       const helperInSegments = savedSegmentColumnsState.includes(outputName);
+      const labelSuggestions = labeledHelperSuggestions(profile.column);
       codedCategoryHelperPanel.innerHTML = `
         <div class="sub small">Map common code values to human-readable labels. This saves a standard value-mapping transform and makes the new labeled column available for segmentation and review.</div>
         <div class="selected-package">
@@ -1113,6 +1143,7 @@
             </div>
           `).join('') : '<div class="empty-state compact">No top values available to seed labels.</div>'}
         </div>
+        ${labelSuggestions.length ? `<div class="sub small">Draft a starter segment from: ${labelSuggestions.map((row) => `<button type="button" class="button-link secondary" data-draft-helper-label="${escapeHtml(row.label)}">${escapeHtml(row.label)}</button>`).join(' ')}</div>` : ''}
         <div class="actions">
           <button type="button" class="button-link secondary" id="saveCodedCategoryMapping">Save coded-category labels</button>
           <button type="button" class="button-link secondary" id="promoteCodedCategorySegment">${helperInSegments ? 'Added to segment columns' : 'Use labeled helper in segments'}</button>
@@ -1134,6 +1165,43 @@
       });
       document.getElementById('draftCodedCategorySegment')?.addEventListener('click', () => {
         suggestSegmentFromLabeledHelper(profile.column);
+      });
+      codedCategoryHelperPanel.querySelectorAll('[data-draft-helper-label]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          suggestSegmentFromLabeledHelper(profile.column, btn.dataset.draftHelperLabel || '');
+        });
+      });
+    }
+
+    function valueSuggestionsForSegmentColumn(columnName) {
+      const helperSource = savedRecodesState.find((item) => item.type === 'map_values' && item.output_column === columnName)?.source_column;
+      if (helperSource) {
+        return labeledHelperSuggestions(helperSource).map((row) => row.label);
+      }
+      const profile = columnProfiles[columnName] || {};
+      return (profile.top_values || [])
+        .map((row) => String(row.value ?? '').trim())
+        .filter(Boolean)
+        .slice(0, 8);
+    }
+
+    function renderSegmentValueSuggestions(columnName) {
+      const suggestions = valueSuggestionsForSegmentColumn(columnName);
+      const show = suggestions.length && !['is_null', 'not_null'].includes(segmentRuleOperator.value);
+      segmentValueSuggestionCard.classList.toggle('hidden', !show);
+      if (!show) {
+        segmentValueSuggestionList.innerHTML = '';
+        return;
+      }
+      const helperColumn = helperLabelColumns().includes(columnName);
+      segmentValueSuggestionCopy.textContent = helperColumn
+        ? 'Readable helper labels are available for this segment field.'
+        : 'Pick a common value to speed up the rule.';
+      segmentValueSuggestionList.innerHTML = suggestions.map((value) => `<button type="button" class="button-link secondary" data-segment-suggestion="${escapeHtml(value)}">${escapeHtml(value)}</button>`).join('');
+      segmentValueSuggestionList.querySelectorAll('[data-segment-suggestion]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          segmentRuleValue.value = btn.dataset.segmentSuggestion || '';
+        });
       });
     }
 
@@ -1522,9 +1590,11 @@
     function syncSegmentValueInput() {
       const operator = segmentRuleOperator.value;
       const isNullOperator = ['is_null', 'not_null'].includes(operator);
+      const helperColumn = helperLabelColumns().includes(segmentRuleColumn.value);
       segmentRuleValue.disabled = isNullOperator;
-      segmentRuleValue.placeholder = isNullOperator ? 'No value needed' : 'e.g. Enterprise or 7';
+      segmentRuleValue.placeholder = isNullOperator ? 'No value needed' : (helperColumn ? 'Choose a readable helper label below' : 'e.g. Enterprise or 7');
       if (isNullOperator) segmentRuleValue.value = '';
+      renderSegmentValueSuggestions(segmentRuleColumn.value);
     }
 
     function resetSegmentBuilder() {

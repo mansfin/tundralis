@@ -192,6 +192,10 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn('Use labeled helper in segments', html)
         self.assertIn('Draft starter segment', html)
         self.assertIn('suggestSegmentFromLabeledHelper', html)
+        self.assertIn('labeledHelperSuggestions', html)
+        self.assertIn('segmentValueSuggestionCard', html)
+        self.assertIn('renderSegmentValueSuggestions', html)
+        self.assertIn('Choose a readable helper label below', html)
         self.assertIn('Save coded-category labels', html)
         self.assertIn('Overall satisfaction', html)
 
