@@ -1058,6 +1058,33 @@
       }
     }
 
+    function suggestSegmentFromLabeledHelper(columnName) {
+      const outputName = codedCategoryOutputName(columnName);
+      const helper = existingCodedCategoryRecode(columnName);
+      const labels = Object.values(helper?.mapping || {}).map((value) => String(value).trim()).filter(Boolean);
+      if (!labels.length) {
+        setStatus(segmentBuilderStatus, `Save at least one readable label for '${outputName}' before creating a starter segment.`, 'error');
+        return;
+      }
+      const label = labels[0];
+      const segmentNameValue = `${outputName}: ${label}`;
+      const draft = {
+        name: segmentNameValue,
+        tree: { all: [{ column: outputName, operator: 'equals', value: label }] },
+      };
+      segmentName.value = segmentNameValue;
+      segmentTreeState = treeNodeFromBackend(draft.tree);
+      if (!savedSegmentColumnsState.includes(outputName)) {
+        savedSegmentColumnsState = [outputName, ...savedSegmentColumnsState.filter((col) => col !== outputName)];
+      }
+      rebuildSegmentColumnsUI();
+      segmentRuleColumn.value = outputName;
+      syncSegmentOperatorOptions(outputName);
+      renderSegmentTree();
+      setStatus(segmentBuilderStatus, `Starter segment drafted from '${outputName}' using label '${label}'.`, 'success');
+      setWorkflowTab('segment');
+    }
+
     function renderCodedCategoryHelper(profile) {
       const isCodedCategory = (profile.semantic_class === 'nominal_coded_numeric') || (semanticOverrideFor(profile.column) === 'nominal_coded_numeric');
       codedCategoryHelperCard.classList.toggle('hidden', !isCodedCategory);
@@ -1089,6 +1116,7 @@
         <div class="actions">
           <button type="button" class="button-link secondary" id="saveCodedCategoryMapping">Save coded-category labels</button>
           <button type="button" class="button-link secondary" id="promoteCodedCategorySegment">${helperInSegments ? 'Added to segment columns' : 'Use labeled helper in segments'}</button>
+          <button type="button" class="button-link secondary" id="draftCodedCategorySegment">Draft starter segment</button>
         </div>
       `;
       document.getElementById('saveCodedCategoryMapping')?.addEventListener('click', async () => {
@@ -1103,6 +1131,9 @@
         syncSegmentOperatorOptions(outputName);
         setStatus(segmentBuilderStatus, `Segment builder now prefers '${outputName}'.`, 'success');
         setWorkflowTab('segment');
+      });
+      document.getElementById('draftCodedCategorySegment')?.addEventListener('click', () => {
+        suggestSegmentFromLabeledHelper(profile.column);
       });
     }
 

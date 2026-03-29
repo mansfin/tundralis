@@ -78,6 +78,7 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn("codedCategoryHelperCard", html)
         self.assertIn("Save coded-category labels", html)
         self.assertIn("Use labeled helper in segments", html)
+        self.assertIn("Draft starter segment", html)
         self.assertIn("recodeSourceColumnSelector", html)
         self.assertIn("column-selector-search", html)
         self.assertIn("inspectOutcomeButton", html)
@@ -189,6 +190,8 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn('codedCategoryOutputName', html)
         self.assertIn('preferredSegmentColumns', html)
         self.assertIn('Use labeled helper in segments', html)
+        self.assertIn('Draft starter segment', html)
+        self.assertIn('suggestSegmentFromLabeledHelper', html)
         self.assertIn('Save coded-category labels', html)
         self.assertIn('Overall satisfaction', html)
 
