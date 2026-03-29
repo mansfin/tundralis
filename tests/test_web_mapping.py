@@ -73,6 +73,8 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn("toggleInspectorButton", html)
         self.assertIn("segmentColumnSearch", html)
         self.assertIn("launchRecodeBuilder", html)
+        self.assertIn("semanticOverridesInput", html)
+        self.assertIn("Clarify numeric meaning", html)
         self.assertIn("recodeSourceColumnSelector", html)
         self.assertIn("column-selector-search", html)
         self.assertIn("inspectOutcomeButton", html)
@@ -152,6 +154,7 @@ class TestWebMapping(unittest.TestCase):
                 "target_column": "overall_sat",
                 "predictor_columns": ["product_quality_score", "ease_use_score"],
                 "display_name_map": {"overall_sat": "Overall satisfaction"},
+                "semantic_overrides": {"overall_sat": "ordinal_numeric", "segment": "labeled_categorical"},
                 "recode_definitions": [
                     {
                         "type": "boolean_flag",
@@ -177,6 +180,7 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn('let savedRecodesState = [{', html)
         self.assertIn('"output_column": "is_apac"', html)
         self.assertIn('let savedPredictorSelections = ["product_quality_score", "ease_use_score"]', html)
+        self.assertIn('let savedSemanticOverrides = {"overall_sat": "ordinal_numeric", "segment": "labeled_categorical"}', html)
         self.assertIn('Overall satisfaction', html)
 
     def test_inspect_failure_returns_error_id_and_logs_traceback(self):

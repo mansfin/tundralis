@@ -18,6 +18,7 @@
         <input type="hidden" name="filename" value="{{ filename }}">
         <input type="hidden" name="segment_definitions" id="segmentDefinitionsInput" value="[]">
         <input type="hidden" name="recode_definitions" id="recodeDefinitionsInput" value="[]">
+        <input type="hidden" name="semantic_overrides" id="semanticOverridesInput" value="{}">
 
         <div class="inspector-layout">
           <div class="mapping-main">
@@ -412,6 +413,7 @@
     let savedSegmentDefs = {{ normalized_segment_definitions | default([], true) | tojson }};
     let segmentPreviewsState = {{ segment_previews | default([], true) | tojson }};
     let savedRecodesState = {{ saved_recode_definitions | default([], true) | tojson }};
+    let savedSemanticOverrides = {{ saved_semantic_overrides | default({}, true) | tojson }};
     let columnProfilesTrimmed = {{ column_profiles_trimmed | default(false, true) | tojson }};
     let columnProfileCount = {{ column_profile_count | default(0, true) | tojson }};
     let draftMapRules = [];
@@ -558,6 +560,7 @@
 
     const segmentDefinitionsInput = document.getElementById('segmentDefinitionsInput');
     const recodeDefinitionsInput = document.getElementById('recodeDefinitionsInput');
+    const semanticOverridesInput = document.getElementById('semanticOverridesInput');
     const segmentRuleDraft = document.getElementById('segmentRuleDraft');
     const savedSegments = document.getElementById('savedSegments');
     const segmentPreviewList = document.getElementById('segmentPreviewList');
@@ -776,10 +779,16 @@
         <div><strong>Drivers</strong><div class="sub small">${predictors.length} selected for modeling out of ${recommendationState.driver_pool_count || predictors.length} viable candidates. Default shortlist limit: ${recommendationState.driver_shortlist_limit || predictors.length}.</div></div>
         <div><strong>Possible segment cuts</strong><div class="sub small">${candidateSegments.length ? candidateSegments.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'None surfaced.'}</div></div>
         <div><strong>Helper/admin fields</strong><div class="sub small">${helperFields.length ? helperFields.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'None surfaced.'}</div></div>
-        <div><strong>Needs clarification</strong><div class="sub small">${ambiguousFields.length ? ambiguousFields.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'None surfaced.'}</div></div>
+        <div><strong>Needs clarification</strong><div class="sub small">${ambiguousFields.length ? ambiguousFields.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''} <button type="button" class="button-link secondary js-semantic-override" data-column-name="${escapeHtml(item.name)}" data-semantic-class="ordinal_numeric">Treat as ordered scale</button> <button type="button" class="button-link secondary js-semantic-override" data-column-name="${escapeHtml(item.name)}" data-semantic-class="continuous_numeric">Treat as measure</button> <button type="button" class="button-link secondary js-semantic-override" data-column-name="${escapeHtml(item.name)}" data-semantic-class="nominal_coded_numeric">Treat as coded category</button>`).join('<br>') : 'None surfaced.'}</div></div>
         <div><strong>Excluded fields</strong><div class="sub small">${excluded.length ? excluded.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'None excluded yet.'}</div></div>
       `;
       renderRecommendedRenamePanel();
+      document.querySelectorAll('.js-semantic-override').forEach((el) => {
+        el.addEventListener('click', async (event) => {
+          event.preventDefault();
+          await applySemanticOverride(el.dataset.columnName || '', el.dataset.semanticClass || '');
+        });
+      });
     }
 
     function updateConfirmationPanel() {
@@ -943,8 +952,41 @@
         admin: 'Administrative field',
         derived_target: 'Derived from outcome',
         target: 'Selected outcome',
+        user_semantic_override: 'User override',
       };
       return labels[warning] || warning.replaceAll('_', ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+
+    function semanticClassLabel(value) {
+      const labels = {
+        continuous_numeric: 'Continuous measure',
+        ordinal_numeric: 'Ordered scale',
+        nominal_coded_numeric: 'Coded category',
+        labeled_categorical: 'Labeled category',
+        identifier_helper: 'Helper/admin field',
+        ambiguous_numeric: 'Needs clarification',
+      };
+      return labels[value] || value.replaceAll('_', ' ');
+    }
+
+    function syncSemanticOverridesInput() {
+      semanticOverridesInput.value = JSON.stringify(savedSemanticOverrides || {});
+    }
+
+    function semanticOverrideFor(columnName) {
+      return (savedSemanticOverrides || {})[columnName] || '';
+    }
+
+    async function applySemanticOverride(columnName, semanticClass) {
+      if (!columnName) return;
+      if (semanticClass) {
+        savedSemanticOverrides[columnName] = semanticClass;
+      } else {
+        delete savedSemanticOverrides[columnName];
+      }
+      syncSemanticOverridesInput();
+      await refreshPrepPreview();
+      renderInspector(columnName);
     }
 
     function allDisplayColumns() {
@@ -1698,10 +1740,25 @@
       const warnings = document.getElementById('inspectorWarnings');
       const semanticBadges = [];
       if (profile.semantic_class) {
-        semanticBadges.push(`<span class="warning-pill">${escapeHtml(profile.semantic_class.replaceAll('_', ' '))}</span>`);
+        semanticBadges.push(`<span class="warning-pill">${escapeHtml(semanticClassLabel(profile.semantic_class))}</span>`);
       }
       if (profile.semantic_confidence) {
         semanticBadges.push(`<span class="warning-pill">semantic confidence: ${escapeHtml(profile.semantic_confidence)}</span>`);
+      }
+      if (profile.inferred_type && profile.inferred_type.includes('numeric')) {
+        const overrideValue = semanticOverrideFor(profile.column);
+        semanticBadges.push(`
+          <label class="sub small" style="display:block;width:100%;margin-top:6px;">
+            Clarify numeric meaning
+            <select id="inspectorSemanticOverride">
+              <option value="">Use automatic detection</option>
+              <option value="ordinal_numeric" ${overrideValue === 'ordinal_numeric' ? 'selected' : ''}>Ordered scale</option>
+              <option value="continuous_numeric" ${overrideValue === 'continuous_numeric' ? 'selected' : ''}>Continuous measure</option>
+              <option value="nominal_coded_numeric" ${overrideValue === 'nominal_coded_numeric' ? 'selected' : ''}>Coded category</option>
+              <option value="identifier_helper" ${overrideValue === 'identifier_helper' ? 'selected' : ''}>Helper/admin field</option>
+            </select>
+          </label>
+        `);
       }
       const warningBadges = (profile.warnings || []).map((warning) => `<span class="warning-pill">${warningLabel(warning)}</span>`);
       warnings.innerHTML = (semanticBadges.length || warningBadges.length)
@@ -1713,6 +1770,10 @@
         ? `<table class="value-table"><thead><tr><th>Value</th><th>Count</th><th>%</th></tr></thead><tbody>${profile.top_values.map((row) => `<tr><td>${escapeHtml(row.value)}</td><td>${row.count}</td><td>${row.pct}%</td></tr>`).join('')}</tbody></table>`
         : '<div class="empty-state compact">No non-null values to preview.</div>';
 
+      document.getElementById('inspectorSemanticOverride')?.addEventListener('change', async (event) => {
+        await applySemanticOverride(profile.column, event.target.value || '');
+      });
+
       if (inspectorColumnSelect.value !== columnName) inspectorColumnSelect.value = columnName;
     }
 
@@ -1721,6 +1782,8 @@
       currentNumericColumns = payload.numeric_columns || currentNumericColumns;
       columnProfiles = payload.column_profiles || columnProfiles;
       recommendationState = payload.recommendation || recommendationState;
+      savedSemanticOverrides = payload.saved_semantic_overrides || savedSemanticOverrides;
+      syncSemanticOverridesInput();
       columnProfilesTrimmed = false;
       savedSegmentDefs = payload.normalized_segment_definitions || savedSegmentDefs;
       segmentDefinitionsInput.value = JSON.stringify(savedSegmentDefs);
@@ -1756,6 +1819,7 @@
           display_name_map: savedDisplayNameMap,
           recode_definitions: savedRecodesState,
           segment_definitions: savedSegmentDefs,
+          semantic_overrides: savedSemanticOverrides,
         }),
       });
       const payload = await response.json().catch(() => ({}));
@@ -1960,6 +2024,7 @@
     rebuildInspectorOptions();
     rebuildRecodeSourceOptions();
     rebuildPredictorUI();
+    syncSemanticOverridesInput();
     renderRecommendedRenamePanel();
     rebuildSegmentColumnsUI();
     renderDraftRules();

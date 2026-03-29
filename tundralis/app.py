@@ -734,6 +734,7 @@ def _normalize_mapping_state(mapping: dict | None) -> dict:
         "segment_definitions": mapping.get("segment_definitions") or [],
         "recode_definitions": mapping.get("recode_definitions") or [],
         "display_name_map": mapping.get("display_name_map") or {},
+        "semantic_overrides": mapping.get("semantic_overrides") or {},
     }
 
 
@@ -785,6 +786,24 @@ def _select_inline_profiles(all_profiles: dict[str, dict], selected_columns: lis
     return {col: all_profiles[col] for col in preferred}
 
 
+def _apply_semantic_overrides(column_profiles: dict[str, dict], semantic_overrides: dict[str, str] | None) -> dict[str, dict]:
+    semantic_overrides = semantic_overrides or {}
+    if not semantic_overrides:
+        return column_profiles
+    patched = {name: {**profile} for name, profile in column_profiles.items()}
+    valid_classes = {"continuous_numeric", "ordinal_numeric", "nominal_coded_numeric", "labeled_categorical", "identifier_helper", "ambiguous_numeric"}
+    for column, semantic_class in semantic_overrides.items():
+        if column not in patched or semantic_class not in valid_classes:
+            continue
+        patched[column]["semantic_class"] = semantic_class
+        patched[column]["semantic_confidence"] = "user"
+        warnings = list(patched[column].get("warnings", []))
+        if "user_semantic_override" not in warnings:
+            warnings.append("user_semantic_override")
+        patched[column]["warnings"] = warnings
+    return patched
+
+
 def _mapping_context(
     filename: str,
     *,
@@ -805,16 +824,17 @@ def _mapping_context(
     df = bundle.working_df
     columns = list(df.columns)
     numeric_columns = df.select_dtypes(include="number").columns.tolist()
+    effective_column_profiles = _apply_semantic_overrides(bundle.column_profiles, mapping_state.get("semantic_overrides"))
     recommendation = _build_recommendation(
         columns,
-        bundle.column_profiles,
+        effective_column_profiles,
         numeric_columns,
         saved_predictors=mapping_state["predictor_columns"],
         saved_target=mapping_state["target_column"],
     )
     inferred_target = recommendation["target"]
     inferred_predictors = mapping_state["predictor_columns"] or [item["name"] for item in recommendation["predictors"]]
-    inline_profiles = _select_inline_profiles(bundle.column_profiles, inferred_predictors, inferred_target)
+    inline_profiles = _select_inline_profiles(effective_column_profiles, inferred_predictors, inferred_target)
     return {
         "job_id": job_id,
         "filename": filename,
@@ -834,6 +854,7 @@ def _mapping_context(
         "saved_recode_definitions": effective_recodes,
         "saved_segment_columns": mapping_state["segment_columns"],
         "saved_display_name_map": mapping_state["display_name_map"],
+        "saved_semantic_overrides": mapping_state.get("semantic_overrides", {}),
     }
 
 
@@ -962,7 +983,8 @@ def mapping_profile(job_id: str):
         recode_definitions=mapping_state["recode_definitions"],
         segment_definitions=mapping_state["segment_definitions"],
     )
-    profile = bundle.column_profiles.get(column)
+    effective_profiles = _apply_semantic_overrides(bundle.column_profiles, mapping_state.get("semantic_overrides"))
+    profile = effective_profiles.get(column)
     if not profile:
         abort(404)
     return jsonify({"profile": profile})
@@ -1033,6 +1055,7 @@ def preview_mapping():
             "segment_definitions": payload.get("segment_definitions", []),
             "recode_definitions": payload.get("recode_definitions", []),
             "display_name_map": payload.get("display_name_map", {}),
+            "semantic_overrides": payload.get("semantic_overrides", {}),
         }
     )
     try:
@@ -1055,10 +1078,11 @@ def preview_mapping():
         {
             "columns": context["columns"],
             "numeric_columns": context["numeric_columns"],
-            "column_profiles": bundle.column_profiles,
+            "column_profiles": _apply_semantic_overrides(bundle.column_profiles, mapping_state.get("semantic_overrides")),
             "segment_previews": context["segment_previews"],
             "normalized_segment_definitions": context["normalized_segment_definitions"],
             "recommendation": context["recommendation"],
+            "saved_semantic_overrides": mapping_state.get("semantic_overrides", {}),
         }
     )
 
@@ -1097,6 +1121,7 @@ def run_job():
 
     segment_definitions = _parse_json_field(request.form.get("segment_definitions"))
     recode_definitions = _parse_json_field(request.form.get("recode_definitions"))
+    semantic_overrides = _parse_json_field(request.form.get("semantic_overrides"))
     mapping_state = {
         "target_column": target_column,
         "segment_columns": segment_columns,
@@ -1104,6 +1129,7 @@ def run_job():
         "recode_definitions": recode_definitions,
         "predictor_columns": predictors,
         "display_name_map": display_name_map,
+        "semantic_overrides": semantic_overrides,
     }
 
     try:
@@ -1126,6 +1152,7 @@ def run_job():
         "recode_definitions": recode_definitions,
         "predictor_columns": predictors,
         "display_name_map": display_name_map,
+        "semantic_overrides": semantic_overrides,
     }
     mapping_path = _persist_mapping_state(job_id, mapping)
 
