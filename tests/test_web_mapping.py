@@ -207,15 +207,78 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn("selectedLabels = Array.from(codedCategoryHelperPanel.querySelectorAll('[data-draft-helper-label]:checked'))", html)
         self.assertIn("input.checked = true", html)
         self.assertIn("input.checked = false", html)
+        self.assertIn('hydrateTreeFromDraftRules', html)
+        self.assertIn('syncDraftRulesFromTree', html)
+        self.assertIn('describeSegmentRule', html)
         self.assertIn('describeSegmentTree', html)
         self.assertIn("key === 'any' ? 'Match any' : 'Match all'", html)
         self.assertIn('<div class="sub small">${escapeHtml(describeSegmentTree(seg.tree))}</div>', html)
+        self.assertIn("return nested && nested !== 'No rules saved yet.' ? `(${nested})` : ''", html)
+        self.assertNotIn('<pre>${escapeHtml(JSON.stringify(seg.tree, null, 2))}</pre>', html)
+        self.assertIn('Loaded segment ${index + 1} into the ${loadedSimple ? \'simple + nested\' : \'nested\'} builder.', html)
+        self.assertIn('Builder synced for multi-clause editing.', html)
         self.assertIn('labeledHelperSuggestions', html)
         self.assertIn('segmentValueSuggestionCard', html)
         self.assertIn('renderSegmentValueSuggestions', html)
         self.assertIn('Choose a readable helper label below', html)
         self.assertIn('Save coded-category labels', html)
         self.assertIn('Overall satisfaction', html)
+
+    def test_mapping_page_reloads_nested_segment_state(self):
+        client = app.test_client()
+        csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()
+
+        inspect_response = client.post(
+            "/upload",
+            data={"survey_file": (io.BytesIO(csv_bytes), "client_style_kda.csv")},
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+        )
+        payload = inspect_response.get_json()
+        job_id = payload["job_id"]
+        filename = payload["filename"]
+
+        preview_response = client.post(
+            "/preview",
+            json={
+                "job_id": job_id,
+                "filename": filename,
+                "target_column": "overall_sat",
+                "predictor_columns": ["product_quality_score", "ease_use_score"],
+                "segment_definitions": [
+                    {
+                        "name": "Enterprise APAC or Mid-Market EMEA",
+                        "tree": {
+                            "any": [
+                                {
+                                    "all": [
+                                        {"column": "segment", "operator": "equals", "value": "Enterprise"},
+                                        {"column": "region", "operator": "equals", "value": "APAC"},
+                                    ]
+                                },
+                                {
+                                    "all": [
+                                        {"column": "segment", "operator": "equals", "value": "Mid-Market"},
+                                        {"column": "region", "operator": "equals", "value": "EMEA"},
+                                    ]
+                                },
+                            ]
+                        },
+                    }
+                ],
+            },
+        )
+        self.assertEqual(preview_response.status_code, 200)
+
+        mapping_response = client.get(f"/mapping/{job_id}")
+        self.assertEqual(mapping_response.status_code, 200)
+        html = mapping_response.get_data(as_text=True)
+        self.assertIn('Enterprise APAC or Mid-Market EMEA', html)
+        self.assertIn('savedSegmentDefs', html)
+        self.assertIn('segmentTreeState = treeNodeFromBackend(segment.tree || { all: [] });', html)
+        self.assertIn("const nested = describeSegmentTree(child);", html)
+        self.assertIn("return nested && nested !== 'No rules saved yet.' ? `(${nested})` : '';", html)
+        self.assertNotIn('<pre>${escapeHtml(JSON.stringify(seg.tree, null, 2))}</pre>', html)
 
     def test_inspect_failure_returns_error_id_and_logs_traceback(self):
         client = app.test_client()

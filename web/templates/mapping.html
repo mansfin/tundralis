@@ -548,29 +548,36 @@
       segmentTreeCanvas.querySelectorAll('.segment-tree-kind').forEach((el) => el.addEventListener('change', () => {
         updateTreeNode(el.dataset.nodeId, (node) => { node.kind = el.value; });
         renderSegmentTree();
+        syncDraftRulesFromTree(sanitizeSegmentTree(segmentTreeState));
       }));
       segmentTreeCanvas.querySelectorAll('.segment-tree-add-rule').forEach((el) => el.addEventListener('click', () => {
         updateTreeNode(el.dataset.nodeId, (node) => { node.children.push(createEmptyRule()); });
         renderSegmentTree();
+        syncDraftRulesFromTree(sanitizeSegmentTree(segmentTreeState));
       }));
       segmentTreeCanvas.querySelectorAll('.segment-tree-add-group').forEach((el) => el.addEventListener('click', () => {
         updateTreeNode(el.dataset.nodeId, (node) => { node.children.push(createEmptyGroup('all')); });
         renderSegmentTree();
+        syncDraftRulesFromTree(sanitizeSegmentTree(segmentTreeState));
       }));
       segmentTreeCanvas.querySelectorAll('.segment-tree-remove-node').forEach((el) => el.addEventListener('click', () => {
         removeTreeNode(el.dataset.nodeId);
         renderSegmentTree();
+        syncDraftRulesFromTree(sanitizeSegmentTree(segmentTreeState));
       }));
       segmentTreeCanvas.querySelectorAll('.segment-tree-column').forEach((el) => el.addEventListener('change', () => {
         updateTreeNode(el.dataset.nodeId, (node) => { node.column = el.value; node.operator = operatorOptionsForColumn(el.value)[0]; });
         renderSegmentTree();
+        syncDraftRulesFromTree(sanitizeSegmentTree(segmentTreeState));
       }));
       segmentTreeCanvas.querySelectorAll('.segment-tree-operator').forEach((el) => el.addEventListener('change', () => {
         updateTreeNode(el.dataset.nodeId, (node) => { node.operator = el.value; if (['is_null','not_null'].includes(el.value)) node.value=''; });
         renderSegmentTree();
+        syncDraftRulesFromTree(sanitizeSegmentTree(segmentTreeState));
       }));
       segmentTreeCanvas.querySelectorAll('.segment-tree-value').forEach((el) => el.addEventListener('input', () => {
         updateTreeNode(el.dataset.nodeId, (node) => { node.value = el.value; });
+        syncDraftRulesFromTree(sanitizeSegmentTree(segmentTreeState));
       }));
     }
 
@@ -1645,6 +1652,7 @@
     function resetSegmentBuilder() {
       draftRules = [];
       segmentName.value = '';
+      segmentLogic.value = 'AND';
       segmentTreeState = createEmptyGroup('all');
       renderSegmentTree();
       segmentRuleValue.value = '';
@@ -1653,29 +1661,61 @@
       updateStepAvailability();
     }
 
+    function hydrateTreeFromDraftRules() {
+      const key = segmentLogic.value === 'OR' ? 'any' : 'all';
+      const children = draftRules.map((rule) => ({
+        id: createId(),
+        type: 'rule',
+        column: rule.column || currentColumns[0] || '',
+        operator: rule.operator || 'equals',
+        value: rule.value ?? '',
+      }));
+      segmentTreeState = {
+        id: createId(),
+        type: 'group',
+        kind: key,
+        children: children.length ? children : [createEmptyRule()],
+      };
+      renderSegmentTree();
+    }
+
+    function syncDraftRulesFromTree(tree) {
+      if (!tree || typeof tree !== 'object') {
+        draftRules = [];
+        renderDraftRules();
+        return false;
+      }
+      if (!(tree.all || tree.any)) {
+        draftRules = [];
+        renderDraftRules();
+        return false;
+      }
+      const key = tree.any ? 'any' : 'all';
+      const children = Array.isArray(tree[key]) ? tree[key] : [];
+      const simple = children.length > 0 && children.every((child) => child && !child.all && !child.any && child.column && child.operator);
+      if (!simple) {
+        draftRules = [];
+        renderDraftRules();
+        return false;
+      }
+      draftRules = children.map((child) => ({
+        column: child.column,
+        operator: child.operator,
+        value_type: child.value_type || (columnProfiles[child.column]?.inferred_type || '').includes('numeric') ? 'numeric' : 'categorical',
+        ...(child.value !== undefined ? { value: child.value } : {}),
+      }));
+      segmentLogic.value = key === 'any' ? 'OR' : 'AND';
+      renderDraftRules();
+      return true;
+    }
+
     function loadSegmentIntoBuilder(segment, index) {
       segmentName.value = segment.name || '';
       const tree = segment.tree || {};
-      if (tree.all || tree.any) {
-        const key = tree.any ? 'any' : 'all';
-        const children = tree[key] || [];
-        const simple = children.length > 0 && children.every((child) => child.column && child.operator);
-        if (simple) {
-          draftRules = children.map((child) => ({ ...child }));
-          segmentLogic.value = key === 'any' ? 'OR' : 'AND';
-          segmentTreeState = createEmptyGroup('all');
-      renderSegmentTree();
-          renderDraftRules();
-          setStatus(segmentBuilderStatus, `Loaded segment ${index + 1} into the simple builder.`, 'info');
-          setWorkflowTab('segment');
-          return;
-        }
-      }
-      draftRules = [];
-      renderDraftRules();
+      const loadedSimple = syncDraftRulesFromTree(tree);
       segmentTreeState = treeNodeFromBackend(segment.tree || { all: [] });
       renderSegmentTree();
-      setStatus(segmentBuilderStatus, `Loaded segment ${index + 1} into the nested builder.`, 'info');
+      setStatus(segmentBuilderStatus, `Loaded segment ${index + 1} into the ${loadedSimple ? 'simple + nested' : 'nested'} builder.`, 'info');
       setWorkflowTab('segment');
     }
 
@@ -1693,8 +1733,14 @@
         btn.addEventListener('click', () => {
           draftRules.splice(Number(btn.dataset.removeRule), 1);
           renderDraftRules();
+          hydrateTreeFromDraftRules();
         });
       });
+    }
+
+    function describeSegmentRule(rule) {
+      if (!rule || !rule.column || !rule.operator) return '';
+      return `${rule.column} ${rule.operator}${rule.value !== undefined ? ` ${rule.value}` : ''}`;
     }
 
     function describeSegmentTree(tree) {
@@ -1705,15 +1751,16 @@
         const joiner = key === 'any' ? ' OR ' : ' AND ';
         const formatted = children.map((child) => {
           if (child?.column && child?.operator) {
-            return `${child.column} ${child.operator}${child.value !== undefined ? ` ${child.value}` : ''}`;
+            return describeSegmentRule(child);
           }
-          return JSON.stringify(child);
+          const nested = describeSegmentTree(child);
+          return nested && nested !== 'No rules saved yet.' ? `(${nested})` : '';
         }).filter(Boolean);
         if (formatted.length) {
           return `${key === 'any' ? 'Match any' : 'Match all'}: ${formatted.join(joiner)}`;
         }
       }
-      return JSON.stringify(tree, null, 2);
+      return describeSegmentRule(tree) || 'No rules saved yet.';
     }
 
     function renderSavedSegments() {
@@ -1730,7 +1777,6 @@
             </div>
           </div>
           <div class="sub small">${escapeHtml(describeSegmentTree(seg.tree))}</div>
-          <pre>${escapeHtml(JSON.stringify(seg.tree, null, 2))}</pre>
         `;
         savedSegments.appendChild(el);
       });
@@ -2167,8 +2213,9 @@
       draftRules.push(rule);
       segmentRuleValue.value = '';
       renderDraftRules();
+      hydrateTreeFromDraftRules();
       renderInspector(segmentRuleColumn.value);
-      setStatus(segmentBuilderStatus, 'Rule added.', 'success');
+      setStatus(segmentBuilderStatus, draftRules.length > 1 ? 'Rule added. Builder synced for multi-clause editing.' : 'Rule added.', 'success');
     });
 
     document.getElementById('saveSegmentDefinition')?.addEventListener('click', async () => {
@@ -2274,7 +2321,11 @@
       syncInspectorCollapse();
     });
     document.getElementById('refreshPrepPreview')?.addEventListener('click', refreshPrepPreview);
-    document.getElementById('resetSegmentTree')?.addEventListener('click', () => { segmentTreeState = createEmptyGroup('all'); renderSegmentTree(); });
+    document.getElementById('resetSegmentTree')?.addEventListener('click', () => {
+      segmentTreeState = createEmptyGroup('all');
+      syncDraftRulesFromTree(segmentTreeState);
+      renderSegmentTree();
+    });
     document.getElementById('resetSegmentBuilder')?.addEventListener('click', resetSegmentBuilder);
     launchRecodeBuilder?.addEventListener('click', async () => {
       try {
