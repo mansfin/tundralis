@@ -31,14 +31,31 @@ As of 2026-03-29:
 
 The issue appears to be browser-proxy/tooling reliability, not app auth itself.
 
-Observed flaky operations on the Windows node browser proxy:
-- screenshot requests timing out
-- click actions timing out
-- file upload path resolution requiring a Windows-local OpenClaw uploads directory
+Observed behavior on the Windows node browser proxy:
+- screenshot requests can time out on the authenticated Tundralis page even when snapshot/evaluate succeed
+- click actions are semi-reliable; some failures appear to be post-click wait/settling behavior rather than true click misses
+- file upload path resolution requires a Windows-local OpenClaw uploads directory, not a Linux workspace path
 
 This means:
 - authenticated page-load verification is trustworthy
-- full end-to-end live upload automation is not yet trustworthy from the current node/browser proxy path
+- DOM inspection via snapshot/evaluate is trustworthy
+- full end-to-end live upload automation is not yet fully trustworthy from the current node/browser proxy path without a Windows-local upload staging step
+
+## Action reliability notes
+
+### Reliable now
+- `snapshot`
+- `evaluate`
+- authenticated `navigate`
+
+### Semi-reliable now
+- `click`
+  - may report timeout even when the click actually fired
+  - prefer validating post-click state with `snapshot` or `evaluate`
+
+### Least reliable now
+- `screenshot` on the authenticated Tundralis page
+- `upload` unless the file is staged into the Windows node's OpenClaw uploads directory first
 
 ## Recommended live QA sequence
 
