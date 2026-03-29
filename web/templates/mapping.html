@@ -115,6 +115,27 @@
                   <div id="schemaHint" class="sub small"></div>
                   <div id="recommendationDetailsPanel" class="recommendation-detail-list hidden"></div>
                 </div>
+                <div class="field-grid recommendation-summary-grid">
+                  <div class="selected-item">
+                    <label class="field-label">Possible segment cuts</label>
+                    <strong id="candidateSegmentCount">0</strong>
+                    <div class="sub small" id="candidateSegmentCopy">Fields that may be better used for breakouts than modeling.</div>
+                  </div>
+                  <div class="selected-item">
+                    <label class="field-label">Helper/admin fields</label>
+                    <strong id="helperFieldCount">0</strong>
+                    <div class="sub small" id="helperFieldCopy">Operational, routing, or export-helper columns to ignore.</div>
+                  </div>
+                  <div class="selected-item">
+                    <label class="field-label">Needs clarification</label>
+                    <strong id="ambiguousFieldCount">0</strong>
+                    <div class="sub small" id="ambiguousFieldCopy">Numeric fields that may need scale/code context before trust is high.</div>
+                  </div>
+                  <div class="selected-item">
+                    <label class="field-label">Schema notes</label>
+                    <div id="ambiguitySummaryPanel" class="sub small">No extra schema guidance yet.</div>
+                  </div>
+                </div>
                 <div class="actions recommendation-actions">
                   <button type="button" id="runRecommendedButton">Run KDA with recommended setup</button>
                   <button type="button" class="button-link secondary" id="reviewMappingButton">Review drivers</button>
@@ -596,6 +617,13 @@
     const schemaConfidenceBanner = document.getElementById('schemaConfidenceBanner');
     const schemaConfidenceTitle = document.getElementById('schemaConfidenceTitle');
     const schemaConfidenceCopy = document.getElementById('schemaConfidenceCopy');
+    const candidateSegmentCount = document.getElementById('candidateSegmentCount');
+    const candidateSegmentCopy = document.getElementById('candidateSegmentCopy');
+    const helperFieldCount = document.getElementById('helperFieldCount');
+    const helperFieldCopy = document.getElementById('helperFieldCopy');
+    const ambiguousFieldCount = document.getElementById('ambiguousFieldCount');
+    const ambiguousFieldCopy = document.getElementById('ambiguousFieldCopy');
+    const ambiguitySummaryPanel = document.getElementById('ambiguitySummaryPanel');
     const codebookFileInput = document.getElementById('codebookFileInput');
     const applyCodebookButton = document.getElementById('applyCodebookButton');
     const labelUpgradeStatus = document.getElementById('labelUpgradeStatus');
@@ -679,6 +707,9 @@
       const outcome = targetColumnSelect.value || recommendationState.target || '—';
       const predictors = currentPredictorSelections();
       const excluded = inferredExcludedColumns();
+      const candidateSegments = recommendationState.candidate_segments || [];
+      const helperFields = recommendationState.helper_fields || [];
+      const ambiguousFields = recommendationState.ambiguous_fields || [];
       const usableRows = recommendationState.usable_rows ?? columnProfiles[targetColumnSelect.value]?.non_null_count;
       const confidence = recommendationConfidenceState(excluded.length);
 
@@ -686,6 +717,18 @@
       recommendationDriverCount.textContent = `${predictors.length} selected`;
       recommendationExcludedCount.textContent = `${excluded.length} excluded`;
       recommendationUsableRows.textContent = Number.isFinite(usableRows) ? String(usableRows) : '—';
+      candidateSegmentCount.textContent = String(candidateSegments.length);
+      helperFieldCount.textContent = String(helperFields.length);
+      ambiguousFieldCount.textContent = String(ambiguousFields.length);
+      candidateSegmentCopy.textContent = candidateSegments.length
+        ? `${candidateSegments.slice(0, 4).map((item) => item.name).join(', ')}${candidateSegments.length > 4 ? '…' : ''}`
+        : 'No obvious segment-cut fields detected.';
+      helperFieldCopy.textContent = helperFields.length
+        ? `${helperFields.slice(0, 4).map((item) => item.name).join(', ')}${helperFields.length > 4 ? '…' : ''}`
+        : 'No obvious admin/helper fields surfaced.';
+      ambiguousFieldCopy.textContent = ambiguousFields.length
+        ? `${ambiguousFields.slice(0, 4).map((item) => item.name).join(', ')}${ambiguousFields.length > 4 ? '…' : ''}`
+        : 'No extra clarification-needed numeric fields detected.';
 
       if (confidence === 'high') {
         recommendationStatus.textContent = 'Recommended setup is ready';
@@ -706,16 +749,34 @@
         .map(([reason, count]) => `${reason} (${count})`)
         .join(', ');
 
-      recommendationExplanation.textContent = `Tundralis selected ${predictors.length} candidate driver field${predictors.length === 1 ? '' : 's'} and excluded ${excluded.length} field${excluded.length === 1 ? '' : 's'} based on profile signals like IDs, open text, metadata, and system fields${reasonSummary ? `: ${reasonSummary}.` : '.'}`;
+      recommendationExplanation.textContent = `Tundralis selected ${predictors.length} candidate driver field${predictors.length === 1 ? '' : 's'}, surfaced ${candidateSegments.length} likely segment cut${candidateSegments.length === 1 ? '' : 's'}, and excluded ${excluded.length} field${excluded.length === 1 ? '' : 's'} based on profile signals like IDs, open text, metadata, and system fields${reasonSummary ? `: ${reasonSummary}.` : '.'}`;
+
+      const ambiguitySummary = recommendationState.ambiguity_summary || {};
+      const summaryLines = [];
+      if ((ambiguitySummary.candidate_segments || []).length) {
+        summaryLines.push(`Possible segment cuts: ${(ambiguitySummary.candidate_segments || []).join(', ')}`);
+      }
+      if ((ambiguitySummary.helper_fields || []).length) {
+        summaryLines.push(`Helper/admin fields: ${(ambiguitySummary.helper_fields || []).join(', ')}`);
+      }
+      if ((ambiguitySummary.needs_field_semantics || []).length) {
+        summaryLines.push(`Needs clarification: ${(ambiguitySummary.needs_field_semantics || []).join(', ')}`);
+      }
+      ambiguitySummaryPanel.innerHTML = summaryLines.length
+        ? summaryLines.map((line) => `<div>${escapeHtml(line)}</div>`).join('')
+        : 'No extra schema guidance yet.';
 
       const rankedOutcomes = recommendationState.outcome_candidates || [];
       const alternativeOutcomes = rankedOutcomes.filter((item) => item.name !== outcome).slice(0, 3);
       schemaHint.textContent = recommendationState.schema_clarity === 'codes_only'
-        ? 'This file appears to use code-style column names without descriptive question text. Tundralis can still recommend a setup, but users may need to confirm labels more often.'
+        ? 'This file appears to use code-style column names without descriptive question text. Tundralis can still recommend a setup, but users may need to confirm labels and numeric field meaning more often.'
         : '';
       recommendationDetailsPanel.innerHTML = `
         <div><strong>Outcome</strong><div class="sub small">Recommended: ${escapeHtml(outcome)}</div>${alternativeOutcomes.length ? `<div class="sub small">Also considered: ${alternativeOutcomes.map((item) => `${escapeHtml(item.name)} (${item.score})`).join(', ')}</div>` : ''}</div>
         <div><strong>Drivers</strong><div class="sub small">${predictors.length} selected for modeling out of ${recommendationState.driver_pool_count || predictors.length} viable candidates. Default shortlist limit: ${recommendationState.driver_shortlist_limit || predictors.length}.</div></div>
+        <div><strong>Possible segment cuts</strong><div class="sub small">${candidateSegments.length ? candidateSegments.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'None surfaced.'}</div></div>
+        <div><strong>Helper/admin fields</strong><div class="sub small">${helperFields.length ? helperFields.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'None surfaced.'}</div></div>
+        <div><strong>Needs clarification</strong><div class="sub small">${ambiguousFields.length ? ambiguousFields.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'None surfaced.'}</div></div>
         <div><strong>Excluded fields</strong><div class="sub small">${excluded.length ? excluded.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'None excluded yet.'}</div></div>
       `;
       renderRecommendedRenamePanel();
@@ -1123,7 +1184,14 @@
       }
       return allDisplayColumns()
         .filter((col) => col !== targetColumnSelect.value)
-        .map((col) => ({ name: col, kind: (columnProfiles[col]?.inferred_type || '').includes('numeric') ? 'numeric' : 'categorical', warnings: columnProfiles[col]?.warnings || [], reasons: [] }));
+        .map((col) => ({
+          name: col,
+          kind: (columnProfiles[col]?.inferred_type || '').includes('numeric') ? 'numeric' : 'categorical',
+          warnings: columnProfiles[col]?.warnings || [],
+          reasons: [],
+          semantic_class: columnProfiles[col]?.semantic_class || '',
+          semantic_confidence: columnProfiles[col]?.semantic_confidence || '',
+        }));
     }
 
     function rebuildTargetOptions() {
@@ -1148,6 +1216,8 @@
           <span class="mono">${escapeHtml(item.name)}</span>
           <span class="pill ${item.kind}">${item.kind}</span>
           ${(item.warnings || []).includes('likely_likert_or_coded_categorical') ? '<span class="warning-pill">Survey scale</span>' : ''}
+          ${item.semantic_class === 'ambiguous_numeric' ? '<span class="warning-pill">Needs clarification</span>' : ''}
+          ${item.semantic_class === 'ordinal_numeric' ? '<span class="warning-pill">Ordinal numeric</span>' : ''}
         </label>`).join('');
 
       const selectedNames = currentPredictorSelections();
@@ -1626,8 +1696,16 @@
       }
 
       const warnings = document.getElementById('inspectorWarnings');
-      warnings.innerHTML = (profile.warnings || []).length
-        ? profile.warnings.map((warning) => `<span class="warning-pill">${warningLabel(warning)}</span>`).join('')
+      const semanticBadges = [];
+      if (profile.semantic_class) {
+        semanticBadges.push(`<span class="warning-pill">${escapeHtml(profile.semantic_class.replaceAll('_', ' '))}</span>`);
+      }
+      if (profile.semantic_confidence) {
+        semanticBadges.push(`<span class="warning-pill">semantic confidence: ${escapeHtml(profile.semantic_confidence)}</span>`);
+      }
+      const warningBadges = (profile.warnings || []).map((warning) => `<span class="warning-pill">${warningLabel(warning)}</span>`);
+      warnings.innerHTML = (semanticBadges.length || warningBadges.length)
+        ? [...semanticBadges, ...warningBadges].join('')
         : '<div class="empty-state compact">No warnings.</div>';
 
       const topValues = document.getElementById('inspectorTopValues');

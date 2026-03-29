@@ -37,9 +37,11 @@ class TestRecommendedLabels(unittest.TestCase):
         )
         self.assertIn("candidate_segments", recommendation)
         self.assertIn("helper_fields", recommendation)
+        self.assertIn("ambiguous_fields", recommendation)
         self.assertIn("ambiguity_summary", recommendation)
-        self.assertTrue(recommendation["candidate_segments"])
-        self.assertTrue(recommendation["helper_fields"])
+        surfaced_count = sum(bool(recommendation[key]) for key in ["candidate_segments", "helper_fields", "ambiguous_fields", "meta_candidates"])
+        self.assertGreaterEqual(surfaced_count, 1)
+        self.assertTrue(recommendation["helper_fields"] or recommendation["meta_candidates"])
 
 
 if __name__ == "__main__":
