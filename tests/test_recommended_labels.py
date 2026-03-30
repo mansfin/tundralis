@@ -74,6 +74,18 @@ class TestRecommendedLabels(unittest.TestCase):
         self.assertGreaterEqual(len(top_values), 2)
         self.assertIn(company_size.get("semantic_class"), {"labeled_categorical", "nominal_coded_numeric", "identifier_helper"})
 
+    def test_qualtrics_raw_export_stays_low_confidence_without_overclaiming_labels(self):
+        bundle = build_prep_bundle(ROOT / "data" / "fixtures" / "qualtrics_raw_export.csv")
+        df = bundle.working_df
+        recommendation = _build_recommendation(
+            list(df.columns),
+            bundle.column_profiles,
+            df.select_dtypes(include="number").columns.tolist(),
+        )
+        self.assertEqual(recommendation.get("schema_clarity"), "codes_only")
+        self.assertFalse(recommendation.get("target"))
+        self.assertLessEqual(len(recommendation.get("recommended_labels", {})), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

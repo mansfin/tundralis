@@ -807,7 +807,13 @@
         .map(([reason, count]) => `${reason} (${count})`)
         .join(', ');
 
-      recommendationExplanation.textContent = `Tundralis selected ${predictors.length} candidate driver field${predictors.length === 1 ? '' : 's'}, surfaced ${candidateSegments.length} likely segment cut${candidateSegments.length === 1 ? '' : 's'}, and excluded ${excluded.length} field${excluded.length === 1 ? '' : 's'} based on profile signals like IDs, open text, metadata, and system fields${reasonSummary ? `: ${reasonSummary}.` : '.'}`;
+      const labelCoverage = predictors.length
+        ? predictors.filter((item) => recommendedLabelFor(item.name)).length
+        : 0;
+      const outcomeLabel = recommendedLabelFor(outcome) || displayNameValue(outcome) || outcome;
+      recommendationExplanation.textContent = confidence === 'high'
+        ? `Tundralis is ready to run KDA on ${predictors.length} candidate driver field${predictors.length === 1 ? '' : 's'} against ${outcomeLabel}. It filtered out ${excluded.length} field${excluded.length === 1 ? '' : 's'} that look like IDs, helper metadata, text responses, or low-signal export debris${reasonSummary ? ` (${reasonSummary})` : ''}.`
+        : `Tundralis found a plausible outcome (${outcomeLabel}) and ${predictors.length} candidate driver field${predictors.length === 1 ? '' : 's'}, but this file still looks messy enough that you should review the setup before running. ${labelCoverage ? `${labelCoverage} recommended label${labelCoverage === 1 ? '' : 's'} are ready to use.` : 'Very few clean labels were inferred automatically.'} ${reasonSummary ? `Top exclusions: ${reasonSummary}.` : ''}`;
 
       const ambiguitySummary = recommendationState.ambiguity_summary || {};
       const summaryLines = [];
