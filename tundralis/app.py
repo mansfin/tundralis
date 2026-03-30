@@ -160,8 +160,28 @@ def _recommended_display_label(column: str, profile: dict) -> str | None:
             continue
         if len(candidate) < 6:
             continue
+        if candidate.count('_') >= 2 and ' ' not in candidate:
+            continue
+        if re.fullmatch(r'[A-Za-z0-9_\-]+', candidate) and ' ' not in candidate:
+            continue
+        if '|' in candidate or '{' in candidate or '}' in candidate:
+            continue
         if inferred_type in {"numeric", "numeric_like_text", "categorical"}:
             return candidate
+
+    fallback = re.sub(r'(?<=[a-z])(?=[A-Z])', ' ', column)
+    fallback = fallback.replace('_', ' ').replace('-', ' ')
+    fallback = re.sub(r'(?<=[A-Z])(?=[A-Z][a-z])', ' ', fallback)
+    fallback = re.sub(r'\s+', ' ', fallback).strip()
+    fallback = re.sub(r'^\d+\s*', '', fallback).strip()
+    if fallback and fallback.lower() != column.lower() and len(fallback) >= 6 and len(fallback.split()) >= 2:
+        words = []
+        for token in fallback.split():
+            if token.isupper() and len(token) <= 5:
+                words.append(token)
+            else:
+                words.append(token.capitalize())
+        return ' '.join(words)
     return None
 
 
@@ -667,19 +687,23 @@ def _build_recommendation(columns: list[str], column_profiles: dict[str, dict], 
         confidence = "medium"
 
     top_outcome_score = outcome_candidates[0]["score"] if outcome_candidates else -999
-    schema_clarity = "described"
-    if (not target) or top_outcome_score < 8:
-        schema_clarity = "codes_only"
-
     recommended_labels = {}
+     
     for item in [*predictors, *candidate_segments[:12], *meta_candidates[:12], *helper_fields[:12], *ambiguous_fields[:12], *excluded]:
         label = item.get("recommended_label")
         if label:
             recommended_labels[item["name"]] = label
-    if target and target in column_profiles:
-        target_label = _recommended_display_label(target, column_profiles.get(target, {}))
-        if target_label:
-            recommended_labels[target] = target_label
+    target_label = _recommended_display_label(target, column_profiles.get(target, {})) if target and target in column_profiles else None
+    if target and target_label:
+        recommended_labels[target] = target_label
+
+    recommended_label_hits = sum(1 for item in predictors if recommended_labels.get(item["name"]))
+    target_looks_codey = bool(target and (_is_low_signal_code_name(target) or _interpretability_score(target) <= 0))
+    low_label_coverage = bool(predictors) and recommended_label_hits < max(2, min(5, len(predictors) // 2))
+
+    schema_clarity = "described"
+    if (not target) or top_outcome_score < 8 or (target_looks_codey and not target_label) or low_label_coverage:
+        schema_clarity = "codes_only"
 
     ambiguity_summary = {
         "needs_field_semantics": [item["name"] for item in ambiguous_fields[:8]],

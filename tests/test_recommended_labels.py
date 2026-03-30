@@ -27,6 +27,14 @@ class TestRecommendedLabels(unittest.TestCase):
         self.assertTrue(recommended_labels)
         self.assertTrue(any(len(label) > 8 for label in recommended_labels.values()))
 
+    def test_recommended_display_label_falls_back_to_humanized_column_name(self):
+        profile = {
+            "question_text": "56_PCSRecommend",
+            "semantic_text": "56_PCSRecommend | {\"ImportId\":\"QID56\"}",
+            "inferred_type": "numeric",
+        }
+        self.assertEqual(_recommended_display_label("56_PCSRecommend", profile), "PCS Recommend")
+
     def test_recommendation_surfaces_semantic_buckets_for_ambiguous_raw_export(self):
         bundle = build_prep_bundle(ROOT / "data" / "fixtures" / "ironclad_brand_perceptions_raw.csv")
         df = bundle.working_df
