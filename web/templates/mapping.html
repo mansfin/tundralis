@@ -2441,25 +2441,35 @@
       rebuildPredictorUI();
     });
 
-    rebuildTargetOptions();
-    rebuildInspectorOptions();
-    rebuildRecodeSourceOptions();
-    rebuildPredictorUI();
-    syncSemanticOverridesInput();
-    renderRecommendedRenamePanel();
-    rebuildSegmentColumnsUI();
-    renderDraftRules();
-    renderSavedSegments();
-    renderSegmentPreviews();
-    renderSavedRecodes();
-    updateRecodeDraftUi();
-    renderSegmentTree();
-    syncSegmentOperatorOptions(segmentRuleColumn.value);
-    syncInspectorCollapse();
-    updateConfirmationPanel();
-    renderRecommendationSummary();
-    setWorkflowTab('model');
-    renderInspector(inspectorColumnSelect.value || targetColumnSelect.value || allDisplayColumns()[0]);
+    const initSteps = [
+      ['rebuildTargetOptions', () => rebuildTargetOptions()],
+      ['rebuildInspectorOptions', () => rebuildInspectorOptions()],
+      ['rebuildRecodeSourceOptions', () => rebuildRecodeSourceOptions()],
+      ['rebuildPredictorUI', () => rebuildPredictorUI()],
+      ['syncSemanticOverridesInput', () => syncSemanticOverridesInput()],
+      ['renderRecommendedRenamePanel', () => renderRecommendedRenamePanel()],
+      ['rebuildSegmentColumnsUI', () => rebuildSegmentColumnsUI()],
+      ['renderDraftRules', () => renderDraftRules()],
+      ['renderSavedSegments', () => renderSavedSegments()],
+      ['renderSegmentPreviews', () => renderSegmentPreviews()],
+      ['renderSavedRecodes', () => renderSavedRecodes()],
+      ['updateRecodeDraftUi', () => updateRecodeDraftUi()],
+      ['renderSegmentTree', () => renderSegmentTree()],
+      ['syncSegmentOperatorOptions', () => syncSegmentOperatorOptions(segmentRuleColumn.value)],
+      ['syncInspectorCollapse', () => syncInspectorCollapse()],
+      ['updateConfirmationPanel', () => updateConfirmationPanel()],
+      ['renderRecommendationSummary', () => renderRecommendationSummary()],
+      ['setWorkflowTab', () => setWorkflowTab('model')],
+      ['renderInspector', () => renderInspector(inspectorColumnSelect.value || targetColumnSelect.value || allDisplayColumns()[0])],
+    ];
+
+    initSteps.forEach(([name, fn]) => {
+      try {
+        fn();
+      } catch (error) {
+        console.error(`mapping init failed at ${name}`, error);
+      }
+    });
   </script>
 </body>
 </html>
