@@ -81,6 +81,7 @@
                   </div>
                 </div>
                 <p class="sub small">Tundralis selected one likely outcome variable, included candidate driver questions, and excluded fields that should not be modeled.</p>
+                <div id="mappingDebug" class="sub small mono" style="white-space: pre-wrap; opacity: 0.75;"></div>
                 <div id="schemaConfidenceBanner" class="schema-banner">
                   <div class="schema-banner-title" id="schemaConfidenceTitle">Review suggested schema</div>
                   <div class="schema-banner-copy" id="schemaConfidenceCopy">Tundralis is checking whether this file includes descriptive labels or code-style field names.</div>
@@ -865,6 +866,15 @@
           await applySemanticOverride(el.dataset.columnName || '', el.dataset.semanticClass || '');
         });
       });
+    }
+
+    const mappingDebug = document.getElementById('mappingDebug');
+    const debugState = [];
+    function pushDebug(label, extra = '') {
+      debugState.push(`${label}${extra ? ` :: ${extra}` : ''}`);
+      if (mappingDebug) {
+        mappingDebug.textContent = debugState.slice(-12).join('\n');
+      }
     }
 
     function updateConfirmationPanel() {
@@ -2441,6 +2451,8 @@
       rebuildPredictorUI();
     });
 
+    pushDebug('script-loaded', `cols=${currentColumns.length}, numeric=${currentNumericColumns.length}, target=${currentTarget || '∅'}, predictors=${savedPredictorSelections.length}`);
+
     const initSteps = [
       ['rebuildTargetOptions', () => rebuildTargetOptions()],
       ['rebuildInspectorOptions', () => rebuildInspectorOptions()],
@@ -2465,8 +2477,11 @@
 
     initSteps.forEach(([name, fn]) => {
       try {
+        pushDebug(`start:${name}`);
         fn();
+        pushDebug(`ok:${name}`, `targetOptions=${targetColumnSelect?.options?.length ?? 'na'}, predictors=${document.querySelectorAll('input[name="predictor_columns"]').length}`);
       } catch (error) {
+        pushDebug(`fail:${name}`, error?.message || String(error));
         console.error(`mapping init failed at ${name}`, error);
       }
     });
