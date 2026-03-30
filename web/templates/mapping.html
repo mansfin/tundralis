@@ -439,6 +439,13 @@
     let draftBucketRules = [];
     let editingRecodeIndex = null;
 
+    document.addEventListener('DOMContentLoaded', () => {
+      const earlyDebug = document.getElementById('mappingDebug');
+      if (earlyDebug && !earlyDebug.textContent) {
+        earlyDebug.textContent = `dom-content-loaded :: cols=${currentColumns.length}, numeric=${currentNumericColumns.length}, target=${currentTarget || '∅'}, predictors=${savedPredictorSelections.length}`;
+      }
+    });
+
     let segmentTreeState = createEmptyGroup('all');
 
     function createId() {
