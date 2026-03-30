@@ -1341,11 +1341,14 @@
 
     function rebuildTargetDisplayInput() {
       const target = targetColumnSelect.value || currentTarget || '';
-      targetDisplayNameContainer.innerHTML = target
-        ? `<input type="text" name="display_name__${escapeHtml(target)}" placeholder="${escapeHtml(recommendedLabelFor(target) || 'Optional display label')}" value="${escapeHtml(displayNameValue(target))}">`
-        : '<div class="empty-state compact">No numeric outcome available.</div>';
-      inspectOutcomeButton.textContent = target || '—';
-      inspectOutcomeButton.dataset.columnName = target;
+      const selectedOption = targetColumnSelect.selectedOptions?.[0];
+      const hasResolvedTarget = Boolean(target);
+      const missingNumericChoice = !hasResolvedTarget || !selectedOption;
+      targetDisplayNameContainer.innerHTML = missingNumericChoice
+        ? '<div class="empty-state compact">Pick an outcome field to continue.</div>'
+        : `<input type="text" name="display_name__${escapeHtml(target)}" placeholder="${escapeHtml(recommendedLabelFor(target) || 'Optional display label')}" value="${escapeHtml(displayNameValue(target))}">`;
+      inspectOutcomeButton.textContent = hasResolvedTarget ? target : '—';
+      inspectOutcomeButton.dataset.columnName = hasResolvedTarget ? target : '';
     }
 
     function rebuildInspectorOptions() {

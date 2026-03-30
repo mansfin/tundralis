@@ -222,6 +222,8 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn('renderSegmentValueSuggestions', html)
         self.assertIn('Choose a readable helper label below', html)
         self.assertIn('Save coded-category labels', html)
+        self.assertIn('Pick an outcome field to continue.', html)
+        self.assertNotIn('No numeric outcome available.', html)
         self.assertIn('Overall satisfaction', html)
 
     def test_mapping_page_reloads_nested_segment_state(self):
