@@ -144,6 +144,99 @@ class TestWebMapping(unittest.TestCase):
         self.assertEqual(payload["segment_previews"][0]["name"], "Enterprise only")
         self.assertGreater(payload["segment_previews"][0]["matched_count"], 0)
 
+    def test_mapping_page_reloads_recommended_non_numeric_outcome_and_labels(self):
+        client = app.test_client()
+        csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()
+
+        inspect_response = client.post(
+            "/upload",
+            data={"survey_file": (io.BytesIO(csv_bytes), "client_style_kda.csv")},
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+        )
+        payload = inspect_response.get_json()
+        job_id = payload["job_id"]
+        filename = payload["filename"]
+
+        preview_response = client.post(
+            "/preview",
+            json={
+                "job_id": job_id,
+                "filename": filename,
+                "target_column": "overall_sat",
+                "predictor_columns": ["product_quality_score", "ease_use_score"],
+                "display_name_map": {
+                    "overall_sat": "Overall satisfaction",
+                    "product_quality_score": "Product quality",
+                    "ease_use_score": "Ease of use",
+                },
+            },
+        )
+        self.assertEqual(preview_response.status_code, 200)
+
+        with patch("tundralis.app._mapping_context") as mocked_context:
+            mocked_context.return_value = {
+                "job_id": job_id,
+                "filename": filename,
+                "display_filename": "client_style_kda.csv",
+                "columns": ["overall_sat", "product_quality_score", "ease_use_score"],
+                "numeric_columns": ["overall_sat", "product_quality_score", "ease_use_score"],
+                "inferred_target": "NPS_2",
+                "inferred_predictors": ["product_quality_score", "ease_use_score"],
+                "predictor_candidates": [],
+                "recommendation": {
+                    "target": "NPS_2",
+                    "predictors": [
+                        {"name": "product_quality_score", "kind": "numeric", "warnings": [], "semantic_class": "continuous_numeric", "semantic_confidence": "high"},
+                        {"name": "ease_use_score", "kind": "numeric", "warnings": [], "semantic_class": "continuous_numeric", "semantic_confidence": "high"},
+                    ],
+                    "outcome_candidates": [
+                        {"name": "NPS_2", "score": 39.0},
+                        {"name": "overall_sat", "score": 31.0},
+                    ],
+                    "helper_fields": [
+                        {"name": "additional_incentive", "reason_labels": ["Administrative/system field"]},
+                    ],
+                    "candidate_segments": [],
+                    "ambiguous_fields": [],
+                    "excluded": [],
+                    "ambiguity_summary": {"candidate_segments": [], "helper_fields": ["additional_incentive"], "needs_field_semantics": []},
+                    "schema_clarity": "described",
+                    "driver_pool_count": 2,
+                    "driver_shortlist_limit": 24,
+                    "usable_rows": 500,
+                },
+                "column_profiles": {
+                    "product_quality_score": {"inferred_type": "numeric", "warnings": []},
+                    "ease_use_score": {"inferred_type": "numeric", "warnings": []},
+                    "NPS_2": {"inferred_type": "categorical", "warnings": []},
+                },
+                "column_profile_count": 3,
+                "column_profiles_trimmed": False,
+                "column_profiles_inline_limit": 25,
+                "segment_previews": [],
+                "normalized_segment_definitions": [],
+                "saved_recode_definitions": [],
+                "saved_segment_columns": [],
+                "saved_display_name_map": {
+                    "NPS_2": "Likelihood to recommend",
+                    "product_quality_score": "Product quality",
+                    "ease_use_score": "Ease of use",
+                },
+                "saved_semantic_overrides": {},
+            }
+
+            mapping_response = client.get(f"/mapping/{job_id}")
+
+        self.assertEqual(mapping_response.status_code, 200)
+        html = mapping_response.get_data(as_text=True)
+        self.assertIn('let currentTarget = "NPS_2"', html)
+        self.assertIn('Likelihood to recommend', html)
+        self.assertIn('Product quality', html)
+        self.assertIn('Ease of use', html)
+        self.assertIn('No user-facing helper/admin fields need attention.', html)
+        self.assertIn('renderRecommendationSummary();', html)
+
     def test_mapping_page_reloads_saved_draft_state(self):
         client = app.test_client()
         csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()

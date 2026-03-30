@@ -780,9 +780,13 @@
       candidateSegmentCopy.textContent = candidateSegments.length
         ? `${candidateSegments.slice(0, 4).map((item) => item.name).join(', ')}${candidateSegments.length > 4 ? '…' : ''}`
         : 'No obvious segment-cut fields detected.';
-      helperFieldCopy.textContent = helperFields.length
-        ? `${helperFields.slice(0, 4).map((item) => item.name).join(', ')}${helperFields.length > 4 ? '…' : ''}`
-        : 'No obvious admin/helper fields surfaced.';
+      const visibleHelperFields = helperFields.filter((item) => {
+        const labels = (item.reason_labels || []).join(' ').toLowerCase();
+        return !labels.includes('administrative') && !labels.includes('helper');
+      });
+      helperFieldCopy.textContent = visibleHelperFields.length
+        ? `${visibleHelperFields.slice(0, 4).map((item) => displayNameValue(item.name)).join(', ')}${visibleHelperFields.length > 4 ? '…' : ''}`
+        : 'No user-facing helper/admin fields need attention.';
       ambiguousFieldCopy.textContent = ambiguousFields.length
         ? `${ambiguousFields.slice(0, 4).map((item) => item.name).join(', ')}${ambiguousFields.length > 4 ? '…' : ''}`
         : 'No extra clarification-needed numeric fields detected.';
@@ -823,8 +827,13 @@
       if ((ambiguitySummary.candidate_segments || []).length) {
         summaryLines.push(`Possible segment cuts: ${(ambiguitySummary.candidate_segments || []).join(', ')}`);
       }
-      if ((ambiguitySummary.helper_fields || []).length) {
-        summaryLines.push(`Helper/admin fields: ${(ambiguitySummary.helper_fields || []).join(', ')}`);
+      const visibleHelperSummary = (ambiguitySummary.helper_fields || []).filter((name) => {
+        const helperItem = helperFields.find((item) => item.name === name);
+        const labels = ((helperItem?.reason_labels) || []).join(' ').toLowerCase();
+        return !labels.includes('administrative') && !labels.includes('helper');
+      });
+      if (visibleHelperSummary.length) {
+        summaryLines.push(`Helper/admin fields worth reviewing: ${visibleHelperSummary.map((name) => displayNameValue(name)).join(', ')}`);
       }
       if ((ambiguitySummary.needs_field_semantics || []).length) {
         summaryLines.push(`Needs clarification: ${(ambiguitySummary.needs_field_semantics || []).join(', ')}`);
@@ -845,7 +854,7 @@
         }).join(', ')}</div>` : ''}${overrideCount ? `<div class="sub small">User semantic clarifications active: ${overrideCount}</div>` : ''}</div>
         <div><strong>Drivers</strong><div class="sub small">${predictors.length} selected for modeling out of ${recommendationState.driver_pool_count || predictors.length} viable candidates. Tundralis is favoring fields that look like interpretable attitudes, experiences, or behaviors and de-prioritizing IDs, metadata, open text, and redundant families. Default shortlist limit: ${recommendationState.driver_shortlist_limit || predictors.length}.</div></div>
         <div><strong>Possible segment cuts</strong><div class="sub small">${candidateSegments.length ? candidateSegments.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'None surfaced.'}</div></div>
-        <div><strong>Helper/admin fields</strong><div class="sub small">${helperFields.length ? helperFields.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'None surfaced.'}</div></div>
+        <div><strong>Helper/admin fields</strong><div class="sub small">${visibleHelperFields.length ? visibleHelperFields.slice(0, 8).map((item) => `${escapeHtml(displayNameValue(item.name))}${displayNameValue(item.name) !== item.name ? ` <span class="mono">(${escapeHtml(item.name)})</span>` : ''}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'No user-facing helper/admin fields need attention.'}</div></div>
         <div><strong>Needs clarification</strong><div class="sub small">${ambiguousFields.length ? ambiguousFields.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''} <button type="button" class="button-link secondary js-semantic-override" data-column-name="${escapeHtml(item.name)}" data-semantic-class="ordinal_numeric">Treat as ordered scale</button> <button type="button" class="button-link secondary js-semantic-override" data-column-name="${escapeHtml(item.name)}" data-semantic-class="continuous_numeric">Treat as measure</button> <button type="button" class="button-link secondary js-semantic-override" data-column-name="${escapeHtml(item.name)}" data-semantic-class="nominal_coded_numeric">Treat as coded category</button>`).join('<br>') : 'None surfaced.'}</div></div>
         <div><strong>Excluded fields</strong><div class="sub small">${excluded.length ? excluded.slice(0, 8).map((item) => `${escapeHtml(item.name)}${(item.reason_labels || []).length ? ` — ${escapeHtml(item.reason_labels.join(', '))}` : ''}`).join('<br>') : 'None excluded yet.'}</div></div>
       `;
@@ -1598,14 +1607,17 @@
       selectedPredictorPackage.innerHTML = selectedNames.length
         ? selectedNames.map((name) => {
             const kind = (columnProfiles[name]?.inferred_type || '').includes('numeric') ? 'numeric' : 'categorical';
+            const displayLabel = displayNameValue(name);
+            const showRawName = displayLabel && displayLabel !== name;
             return `
               <div class="selected-item" data-selected-item="${escapeHtml(name)}">
                 <div class="selected-item-head">
-                  <button type="button" class="column-link mono js-inspect-link" data-column-name="${escapeHtml(name)}">${escapeHtml(name)}</button>
+                  <button type="button" class="column-link js-inspect-link" data-column-name="${escapeHtml(name)}">${escapeHtml(displayLabel || name)}</button>
                   <span class="pill ${kind}">${kind}</span>
                 </div>
+                ${showRawName ? `<div class="sub small mono">${escapeHtml(name)}</div>` : ''}
                 <label class="field-label small">Display name in report</label>
-                <input type="text" name="display_name__${escapeHtml(name)}" placeholder="${escapeHtml(recommendedLabelFor(name) || 'Optional display label')}" value="${escapeHtml(displayNameValue(name))}">
+                <input type="text" name="display_name__${escapeHtml(name)}" placeholder="${escapeHtml(recommendedLabelFor(name) || 'Optional display label')}" value="${escapeHtml(displayLabel)}">
                 ${kind !== 'numeric' ? '<div class="segment-builder-note">This column is non-numeric. Recode it before modeling if needed.</div>' : ''}
               </div>`;
           }).join('')
