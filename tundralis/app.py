@@ -102,6 +102,16 @@ ATTRIBUTE_STYLE_TOKENS = [
 CANONICAL_OUTCOME_BONUS_TOKENS = [
     "engagement_index", "nps_score", "overall_experience", "overall_sat", "overall_satisfaction", "likelihood_to_recommend", "intent_to_stay", "intend_to_stay",
 ]
+GLOBAL_OUTCOME_TOKENS = [
+    "overall", "overall experience", "overall satisfaction", "overall_sat", "overall_satisfaction",
+    "sentiment", "csat", "nps", "recommend", "likelihood to recommend", "likelihood_to_recommend",
+    "would recommend", "intent to stay", "intend to stay", "loyalty", "advocacy", "experience",
+]
+ITEM_LEVEL_TARGET_PATTERNS = [
+    r".+_\d+_\d+$",
+    r".+_item_\d+$",
+    r".+_attribute_\d+$",
+]
 DEFAULT_RECOMMENDED_DRIVER_LIMIT = 24
 MAX_PER_FAMILY = 3
 EXCLUSION_REASON_LABELS = {
@@ -217,6 +227,23 @@ def _column_family(column: str) -> str:
     lower = column.lower()
     normalized = lower.replace("-", "_").replace(".", "_")
     normalized = re.sub(r"_+", "_", normalized)
+
+    battery_prefix_patterns = [
+        (r"^(overall_lik\d+)_\d+$", r"\1"),
+        (r"^(appeallikert2?)_\d+$", r"\1"),
+        (r"^(repslikert)_\d+$", r"\1"),
+        (r"^(vercertlikert)_\d+$", r"\1"),
+        (r"^(accsusp(?:likert)?)_\d+$", r"\1"),
+        (r"^(acclim(?:likert)?)_\d+$", r"\1"),
+        (r"^(pa_lik\d+)_\d+$", r"\1"),
+        (r"^(comp(?:likert)?_?\d*)_\d+$", r"\1"),
+        (r"^(ad disapprov likert)_\d+$", r"\1"),
+    ]
+    for pattern, replacement in battery_prefix_patterns:
+        if re.fullmatch(pattern, normalized):
+            normalized = re.sub(pattern, replacement, normalized)
+            return normalized.strip("_") or lower
+
     normalized = re.sub(r"(_?\d+)+$", "", normalized)
     normalized = re.sub(r"^q\d+_?", "q", normalized)
     normalized = re.sub(r"^v\d+$", "v_generic", normalized)
@@ -338,13 +365,30 @@ def _family_score(family: str, items: list[dict]) -> float:
         score += 6
     if family in {"q", "v_generic"}:
         score -= 6
+    if any(item.get("semantic_class") in {"ordinal_labeled", "ordinal_numeric"} for item in items):
+        score += 6
     if any("likely_likert_or_coded_categorical" in item.get("warnings", []) for item in items):
         score += 3
     if any(_looks_like_brand_tracker_debris(item["name"]) for item in items):
         score -= 5
+    if any(any(token in (item.get("question_text") or "").lower() for token in ["rate your level of agreement", "how satisfied", "likelihood to recommend", "overall experience", "customer support", "appeal experience"]) for item in items):
+        score += 5
+    if any(any(token in item["name"].lower() for token in ["incentive", "payment", "reward", "spend", "budget"]) for item in items):
+        score -= 14
     score += min(len(items), 4)
     score += sum(item.get("score", 0) for item in items[:3]) / 6
     return round(score, 2)
+
+
+def _looks_item_level_target(column: str, profile: dict) -> bool:
+    lower = column.lower()
+    semantic_lower = _semantic_text(column, profile)
+    if any(re.fullmatch(pattern, lower) for pattern in ITEM_LEVEL_TARGET_PATTERNS):
+        return True
+    if re.search(r"\b(attribute|statement|item)\b", semantic_lower) and re.search(r"\b\d+\b", semantic_lower):
+        return True
+    return False
+
 
 
 def _target_score(column: str, profile: dict) -> float:
@@ -357,11 +401,11 @@ def _target_score(column: str, profile: dict) -> float:
     missing_pct = float(profile.get("missing_pct", 0) or 0)
     non_null = int(profile.get("non_null_count", 0) or 0)
 
-    if inferred_type not in {"numeric", "numeric_like_text"}:
+    if inferred_type not in {"numeric", "numeric_like_text", "categorical"}:
         return -999
     if "likely_identifier" in warnings or _is_admin_like(column):
         return -999
-    if semantic_class in {"identifier_helper", "nominal_coded_numeric"}:
+    if semantic_class in {"identifier_helper", "nominal_coded_numeric", "labeled_categorical"}:
         return -999
     if _looks_like_text_artifact(column) or _looks_like_text_artifact(lower):
         return -999
@@ -377,8 +421,12 @@ def _target_score(column: str, profile: dict) -> float:
     score = 0.0
     if any(token in lower for token in TARGET_KEYWORDS_STRONG):
         score += 12
+    if any(token in lower for token in GLOBAL_OUTCOME_TOKENS):
+        score += 6
     if semantic_class == "ordinal_numeric":
         score += 2
+    if semantic_class == "ordinal_labeled":
+        score += 5
     if semantic_class == "continuous_numeric":
         score += 1
     if semantic_confidence == "low" and _is_low_signal_code_name(column):
@@ -411,6 +459,8 @@ def _target_score(column: str, profile: dict) -> float:
         score -= 6
     if any(token in lower for token in ATTRIBUTE_STYLE_TOKENS) and not any(token in lower for token in TARGET_KEYWORDS_CANONICAL_OUTCOME):
         score -= 3
+    if _looks_item_level_target(column, profile):
+        score -= 9
     if lower.startswith('q') or lower.startswith('v') or re.fullmatch(r's\d+(?:_\d+)?', lower):
         score -= 5
     if _is_low_signal_code_name(column):
@@ -461,6 +511,8 @@ def _predictor_score(column: str, profile: dict, inferred_target: str | None) ->
         score += 4
     if semantic_class == "ordinal_numeric":
         score += 4
+    if semantic_class == "ordinal_labeled":
+        score += 6
     if semantic_class == "continuous_numeric":
         score += 2
     if semantic_class == "nominal_coded_numeric":
@@ -471,12 +523,21 @@ def _predictor_score(column: str, profile: dict, inferred_target: str | None) ->
         score -= 3
     if semantic_confidence == "low":
         score -= 2
+    if non_null := int(profile.get("non_null_count", 0) or 0):
+        if non_null < 25:
+            score -= 8
+    else:
+        score -= 20
     if "likely_likert_or_coded_categorical" in warnings:
         score += 5
     if 3 <= distinct <= 11:
         score += 2
     if missing_pct <= 20:
         score += 1
+    if missing_pct >= 90:
+        score -= 16
+    elif missing_pct >= 60:
+        score -= 8
     if _is_admin_like(column):
         score -= 8
     if "likely_identifier" in warnings:
@@ -498,17 +559,19 @@ def _predictor_score(column: str, profile: dict, inferred_target: str | None) ->
             score -= 6
     if any(token in lower for token in ["other", "specify", "text", "open end", "comment", "selected choice"]):
         score -= 8
-    if _looks_like_text_artifact(column) or _looks_like_text_artifact(lower):
+    if any(token in lower for token in ["incentive", "gift", "reward", "payment", "spend", "budget"]):
+        score -= 14
+    if _looks_like_text_artifact(column):
         score -= 10
-    if _looks_like_geo_artifact(column) or _looks_like_geo_artifact(lower):
+    if _looks_like_geo_artifact(column):
         score -= 9
-    if _looks_like_battery_artifact(column) or _looks_like_battery_artifact(lower):
+    if _looks_like_battery_artifact(column):
         score -= 7
     if _looks_like_choice_order_artifact(column) or 'display order' in lower:
         score -= 12
-    if _looks_like_segment_meta_candidate(column, profile) or _looks_like_segment_meta_candidate(lower, profile):
+    if _looks_like_segment_meta_candidate(column, profile):
         score -= 7
-    if _looks_like_brand_tracker_debris(column) or _looks_like_brand_tracker_debris(lower):
+    if _looks_like_brand_tracker_debris(column):
         score -= 9
     if _looks_like_vendor_plumbing(column) or _looks_like_vendor_plumbing(lower):
         score -= 15
@@ -536,6 +599,11 @@ def _predictor_recommendation(column: str, profile: dict, inferred_target: str |
         reasons.append("helper_or_identifier")
     if semantic_class == "ambiguous_numeric":
         reasons.append("ambiguous_numeric")
+    if profile.get("non_null_count", 0) == 0:
+        reasons.append("high_missingness")
+    semantic_lower = _semantic_text(column, profile)
+    if any(token in semantic_lower for token in ["incentive", "gift", "reward", "payment", "spend", "budget"]):
+        reasons.append("admin")
     if "likely_identifier" in warnings:
         reasons.append("likely_identifier")
     if "high_cardinality" in warnings and inferred_type not in {"numeric", "numeric_like_text"}:
@@ -544,15 +612,15 @@ def _predictor_recommendation(column: str, profile: dict, inferred_target: str |
         reasons.append("text")
     if inferred_type == "mixed":
         reasons.append("mixed_numeric_text")
-    if _looks_like_text_artifact(column) or _looks_like_text_artifact(lower):
+    if _looks_like_text_artifact(column):
         reasons.append("text_artifact")
-    if _looks_like_geo_artifact(column) or _looks_like_geo_artifact(lower):
+    if _looks_like_geo_artifact(column):
         reasons.append("geo_artifact")
-    if _looks_like_battery_artifact(column) or _looks_like_battery_artifact(lower):
+    if _looks_like_battery_artifact(column):
         reasons.append("battery_artifact")
     if _looks_like_choice_order_artifact(column):
         reasons.append("choice_order_artifact")
-    if _looks_like_segment_meta_candidate(column, profile) or _looks_like_segment_meta_candidate(lower, profile):
+    if _looks_like_segment_meta_candidate(column, profile):
         reasons.append("meta_candidate")
     if semantic_class in {"labeled_categorical", "nominal_coded_numeric"} and _looks_like_segment_meta_candidate(column, profile):
         reasons.append("candidate_segment")
@@ -560,7 +628,7 @@ def _predictor_recommendation(column: str, profile: dict, inferred_target: str |
         reasons.append("weak_family")
     if _looks_like_vendor_plumbing(column) or _looks_like_vendor_plumbing(lower):
         reasons.append("admin")
-    if inferred_type == "categorical" and not profile.get("numeric_summary") and "likely_likert_or_coded_categorical" not in warnings:
+    if inferred_type == "categorical" and semantic_class not in {"ordinal_labeled"} and not profile.get("numeric_summary") and "likely_likert_or_coded_categorical" not in warnings:
         reasons.append("categorical")
     if inferred_target and (inferred_target.lower() in lower or lower in inferred_target.lower()) and column != inferred_target:
         reasons.append("derived_target")

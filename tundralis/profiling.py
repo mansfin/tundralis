@@ -112,16 +112,18 @@ def _semantic_lower(column: str, column_context: dict | None) -> str:
 
 def _looks_admin_like(column: str, semantic_lower: str, warnings: list[str]) -> bool:
     lower = column.lower()
-    admin_tokens = [
+    admin_column_tokens = [
         "startdate", "enddate", "recordeddate", "status", "ipaddress", "recipient", "email", "phone",
         "externalreference", "latitude", "longitude", "distributionchannel", "userlanguage", "duration",
         "progress", "finished", "location", "fraud", "duplicate", "responseid", "respondentid",
-        "transaction_id", "session_id", "redirecturl", "redirect_url", "importid", "display order",
-        "selected choice", "panelist", "panel_id", "supplier", "sample_source",
+        "transaction_id", "session_id", "redirecturl", "redirect_url", "panelist", "panel_id", "supplier", "sample_source",
     ]
+    admin_semantic_tokens = ["display order"]
     if "likely_identifier" in warnings:
         return True
-    return any(token in lower or token in semantic_lower for token in admin_tokens)
+    if any(token in lower for token in admin_column_tokens):
+        return True
+    return any(token in semantic_lower for token in admin_semantic_tokens)
 
 
 def _looks_segment_like(column: str, semantic_lower: str) -> bool:
@@ -160,6 +162,13 @@ def _semantic_class(series: pd.Series, column: str, inferred_type: str, warnings
     if _looks_admin_like(column, semantic_lower, warnings):
         return "identifier_helper", "high"
 
+    if inferred_type == "categorical":
+        if distinct <= LIKERT_MAX_UNIQUE and any(token in semantic_lower for token in ["agree", "satisf", "recommend", "likely", "ease", "quality", "support", "trust", "rate", "positive", "frequency", "reasonable", "fair", "clear", "helpful"]):
+            return "ordinal_labeled", "high"
+        if _looks_segment_like(column, semantic_lower):
+            return "labeled_categorical", "high"
+        return "labeled_categorical", "medium"
+
     if inferred_type == "text":
         if any(token in lower or token in semantic_lower for token in ["comment", "verbatim", "open end", "open_end", "specify", "free text"]):
             return "free_text", "high"
@@ -167,13 +176,6 @@ def _semantic_class(series: pd.Series, column: str, inferred_type: str, warnings
 
     if inferred_type == "mixed":
         return "ambiguous_numeric", "low"
-
-    if inferred_type == "categorical":
-        if _looks_segment_like(column, semantic_lower):
-            return "labeled_categorical", "high"
-        if distinct <= LIKERT_MAX_UNIQUE and any(token in semantic_lower for token in ["agree", "satisf", "recommend", "likely", "ease", "quality", "support", "trust", "rate"]):
-            return "ordinal_labeled", "medium"
-        return "labeled_categorical", "medium"
 
     if inferred_type in {"numeric", "numeric_like_text"}:
         if "likely_likert_or_coded_categorical" in warnings:
