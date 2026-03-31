@@ -59,6 +59,18 @@ Example:
 
 Do not store these in `MEMORY.md`, Slack notes, or committed files.
 
+### Durable mapping vs results URLs
+
+Mapping review URLs (`/mapping/<job_id>`) are only durable after mapping state has been persisted via preview/run.
+
+Operational behavior:
+- fresh uploads may open a transient mapping page immediately after upload
+- persisted mapping jobs can be revisited safely
+- stale or partially persisted jobs return `404` instead of rendering a misleading empty review shell
+
+If you want a durable artifact to revisit, use the results route after a successful run:
+- `/results/<job_id>`
+
 ### 2. Generate sample data (optional)
 
 ```bash
