@@ -6,66 +6,239 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
 </head>
 <body>
+  {% set top_drivers = payload.drivers|sort(attribute='opportunity.rank') %}
+  {% set top_driver = top_drivers[0] if top_drivers else none %}
+  {% set top_three = top_drivers[:3] %}
+  {% set rows_modeled = payload.input_summary.rows_modeled %}
+  {% set predictor_count = payload.input_summary.predictor_columns|length %}
+  {% set r2 = payload.model_diagnostics.r_squared %}
+  {% set confidence_label = 'Strong directional signal' if r2 >= 0.35 else 'Useful, review with context' if r2 >= 0.2 else 'Low confidence' %}
+  {% set confidence_class = 'high' if r2 >= 0.35 else 'medium' if r2 >= 0.2 else 'low' %}
+  {% set top_driver_names = top_three|map(attribute='driver_label')|list %}
   <main class="shell wide">
-    <section class="card">
+    <section class="card results-hero-card">
       <div class="eyebrow">tundralis</div>
-      <h1>Run complete</h1>
+      <h1>Analysis complete</h1>
       <p class="sub">{{ display_filename or filename }}</p>
-      <div class="stats">
-        <div class="stat"><span>Rows modeled</span><strong>{{ payload.input_summary.rows_modeled }}</strong></div>
-        <div class="stat"><span>Predictors</span><strong>{{ payload.input_summary.predictor_columns|length }}</strong></div>
-        <div class="stat"><span>R²</span><strong>{{ '%.3f'|format(payload.model_diagnostics.r_squared) }}</strong></div>
+      <div class="recommendation-confidence-strip">
+        <div class="confidence-pill confidence-{{ confidence_class }}">{{ confidence_label }}</div>
+        <div class="confidence-strip-copy">
+          {% if top_driver_names %}
+          Strongest opportunities: {{ top_driver_names|join(', ') }}.
+          {% else %}
+          Analysis is complete and ready for review.
+          {% endif %}
+        </div>
       </div>
-      <h2>Top priorities</h2>
-      {% set top_drivers = payload.drivers|sort(attribute='opportunity.rank') %}
-      <ol>
-        {% for driver in top_drivers[:5] %}
-        <li><strong>{{ driver.driver_label }}</strong> — {{ driver.classification }} (opp {{ '%.2f'|format(driver.opportunity.score) }})</li>
-        {% endfor %}
-      </ol>
+      <p class="sub small">
+        {% if top_driver_names|length >= 3 %}
+        The biggest near-term opportunities are <strong>{{ top_driver_names[0] }}</strong>, <strong>{{ top_driver_names[1] }}</strong>, and <strong>{{ top_driver_names[2] }}</strong>. These are the drivers with the strongest combination of modeled impact and remaining room to improve.
+        {% elif top_driver_names %}
+        The strongest opportunity in this run is <strong>{{ top_driver_names[0] }}</strong>, based on modeled impact and remaining headroom.
+        {% else %}
+        Review the summaries below, inspect the preview visuals, and download the report when you’re ready.
+        {% endif %}
+      </p>
+      <div class="actions">
+        <a class="button-link" href="/artifacts/{{ job_id }}/report.pptx">Download report</a>
+        <a class="button-link secondary" href="/artifacts/{{ job_id }}/analysis_run.json">Download JSON</a>
+      </div>
+    </section>
 
-      {% if payload.input_summary.segment_previews %}
-      <h2>Segment previews</h2>
+    <section class="card inner">
+      <div class="section-head block">
+        <div>
+          <h2>Decision summary</h2>
+          <p class="sub small">The key run metrics, framed for decision-making instead of telemetry.</p>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat"><span>Rows modeled</span><strong>{{ rows_modeled }}</strong></div>
+        <div class="stat"><span>Drivers evaluated</span><strong>{{ predictor_count }}</strong></div>
+        <div class="stat"><span>Model fit</span><strong>{{ '%.3f'|format(r2) }}</strong></div>
+        <div class="stat"><span>Top opportunity</span><strong>{{ top_driver.driver_label if top_driver else '—' }}</strong></div>
+      </div>
+    </section>
+
+    <section class="card inner">
+      <div class="section-head block">
+        <div>
+          <h2>Top actions to prioritize</h2>
+          <p class="sub small">This is the short list of drivers most likely to move the outcome.</p>
+        </div>
+      </div>
       <div class="selected-package">
-        {% for segment in payload.input_summary.segment_previews %}
-        <div class="selected-item">
-          <div class="selected-item-head">
-            <strong>{{ segment.name }}</strong>
-            <span>{{ segment.matched_count }} rows · {{ '%.1f'|format(segment.matched_pct) }}%</span>
+        {% for driver in top_three %}
+        {% set perf = driver.performance.normalized_mean_0_100 %}
+        {% set impact = driver.impact.one_point_dv_change %}
+        {% set importance = driver.importance.share_of_explained_variance %}
+        <div class="selected-item compact-card">
+          <div class="selected-item-head compact-head">
+            <div>
+              <strong>{{ driver.driver_label }}</strong>
+              <div class="sub small">{{ driver.classification }} · opportunity {{ '%.2f'|format(driver.opportunity.score) }}</div>
+            </div>
+            <span class="pill">rank {{ driver.opportunity.rank }}</span>
+          </div>
+          <div class="metric-grid compact">
+            <div class="metric-card">
+              <span>Performance</span>
+              <strong>{{ '%.1f'|format(perf) }}</strong>
+            </div>
+            <div class="metric-card">
+              <span>Impact</span>
+              <strong>{{ '%.2f'|format(impact) }}</strong>
+            </div>
+            <div class="metric-card">
+              <span>Importance</span>
+              <strong>{{ '%.2f'|format(importance) }}</strong>
+            </div>
+            <div class="metric-card">
+              <span>Headroom</span>
+              <strong>{{ '%.0f'|format(driver.performance.headroom * 100) }}</strong>
+            </div>
+          </div>
+          <div class="sub small">
+            {% if perf < 70 and impact >= 0.2 %}
+            High impact with visible room to improve. This should be a real priority, not background noise.
+            {% elif perf >= 70 and impact >= 0.2 %}
+            Strong impact and already performing fairly well. Protect it while looking for targeted gains.
+            {% elif perf < 70 %}
+            There is room to improve here, but the modeled leverage is more moderate than the top opportunities.
+            {% else %}
+            Useful to monitor, but not where the next dollar or team cycle should go first.
+            {% endif %}
           </div>
         </div>
         {% endfor %}
       </div>
-      {% endif %}
+    </section>
 
-      {% if payload.segment_summaries %}
-      <h2>Segment summaries</h2>
+    <section class="card inner">
+      <div class="section-head block">
+        <div>
+          <h2>Run confidence</h2>
+          <p class="sub small">A quick read on how much trust to put in this run.</p>
+        </div>
+      </div>
+      <div class="selected-item compact-card">
+        <div class="selected-item-head compact-head">
+          <strong>{{ confidence_label }}</strong>
+          <span class="pill">R² {{ '%.3f'|format(r2) }}</span>
+        </div>
+        <div class="metric-grid compact">
+          <div class="metric-card">
+            <span>Adjusted R²</span>
+            <strong>{{ '%.3f'|format(payload.model_diagnostics.adj_r_squared) }}</strong>
+          </div>
+          <div class="metric-card">
+            <span>Rows modeled</span>
+            <strong>{{ rows_modeled }}</strong>
+          </div>
+          <div class="metric-card">
+            <span>Method agreement</span>
+            <strong>{{ payload.model_diagnostics.method_agreement|replace('_', ' ')|title }}</strong>
+          </div>
+          <div class="metric-card">
+            <span>Nonlinear signal</span>
+            <strong>{{ payload.model_diagnostics.nonlinear_signal|replace('_', ' ')|title }}</strong>
+          </div>
+        </div>
+        <div class="sub small">
+          {% if confidence_class == 'high' %}
+          This looks like a healthy directional read. Still use judgment, but the model has enough signal to guide action.
+          {% elif confidence_class == 'medium' %}
+          Useful for prioritization, but worth pairing with context from the survey design and any known sampling quirks.
+          {% else %}
+          Treat this as weak directional guidance only. Small sample size, low fit, or both are limiting confidence.
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    {% if payload.segment_summaries or payload.input_summary.segment_previews %}
+    <section class="card inner">
+      <div class="section-head block">
+        <div>
+          <h2>Segment insights</h2>
+          <p class="sub small">Breakout views that help you see where the overall story shifts.</p>
+        </div>
+      </div>
       <div class="selected-package">
         {% for segment in payload.segment_summaries %}
-        <div class="selected-item">
-          <div class="selected-item-head">
-            <strong>{{ segment.name }}</strong>
-            <span>N={{ segment.rows_modeled }} · R²={{ '%.3f'|format(segment.r_squared) }}</span>
+        <div class="selected-item compact-card">
+          <div class="selected-item-head compact-head">
+            <div>
+              <strong>{{ segment.name }}</strong>
+              <div class="sub small">N={{ segment.rows_modeled }} · R²={{ '%.3f'|format(segment.r_squared) }}</div>
+            </div>
+            <span class="pill">{{ segment.top_drivers|length }} top driver{{ '' if segment.top_drivers|length == 1 else 's' }}</span>
           </div>
           <div class="sub small">Top drivers: {{ segment.top_drivers|join(', ') }}</div>
+          <div class="sub small">
+            {% if segment.top_drivers %}
+            For {{ segment.name }}, the story is led by {{ segment.top_drivers[0] }}{% if segment.top_drivers|length > 1 %} and {{ segment.top_drivers[1] }}{% endif %}.
+            {% else %}
+            Segment results are available, but this breakout did not surface a strong short list.
+            {% endif %}
+          </div>
         </div>
         {% endfor %}
-      </div>
-      {% endif %}
 
-      <h2>Preview charts</h2>
+        {% if not payload.segment_summaries and payload.input_summary.segment_previews %}
+          {% for segment in payload.input_summary.segment_previews %}
+          <div class="selected-item compact-card">
+            <div class="selected-item-head compact-head">
+              <strong>{{ segment.name }}</strong>
+              <span class="pill">{{ segment.matched_count }} rows</span>
+            </div>
+            <div class="sub small">{{ '%.1f'|format(segment.matched_pct) }}% of the dataset matched this segment.</div>
+          </div>
+          {% endfor %}
+        {% endif %}
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="card inner">
+      <div class="section-head block">
+        <div>
+          <h2>Preview the key visuals</h2>
+          <p class="sub small">These visuals support the story above and mirror what lands in the deck.</p>
+        </div>
+      </div>
       <div class="preview-grid">
         {% for image in preview_images %}
         <div class="preview-card">
           <img src="/artifacts/{{ job_id }}/{{ image }}" alt="{{ image }}">
-          <div class="preview-label">{{ image }}</div>
+          <div class="preview-label">{{ image|replace('_', ' ')|replace('.png', '') }}</div>
         </div>
         {% endfor %}
       </div>
+    </section>
 
-      <div class="actions">
-        <a class="button-link" href="/artifacts/{{ job_id }}/report.pptx">Download PPTX</a>
-        <a class="button-link secondary" href="/artifacts/{{ job_id }}/analysis_run.json">Download JSON</a>
+    <section class="card inner">
+      <div class="section-head block">
+        <div>
+          <h2>Deliverables</h2>
+          <p class="sub small">Download the polished deck for sharing or the JSON for automation, QA, and downstream workflows.</p>
+        </div>
+      </div>
+      <div class="selected-package">
+        <div class="selected-item compact-card">
+          <div class="selected-item-head compact-head">
+            <strong>Presentation deck</strong>
+            <a class="button-link" href="/artifacts/{{ job_id }}/report.pptx">Download report</a>
+          </div>
+          <div class="sub small">Ready-to-share PowerPoint with the main takeaways and charts.</div>
+        </div>
+        <div class="selected-item compact-card">
+          <div class="selected-item-head compact-head">
+            <strong>Analysis JSON</strong>
+            <a class="button-link secondary" href="/artifacts/{{ job_id }}/analysis_run.json">Download JSON</a>
+          </div>
+          <div class="sub small">Structured output for validation, automation, and future product workflows.</div>
+        </div>
       </div>
     </section>
   </main>

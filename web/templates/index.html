@@ -12,7 +12,15 @@
       <h1>Upload your survey data</h1>
       <p class="sub">Upload a CSV and Tundralis will prepare a recommended KDA setup for you. Review it, run the analysis, and download a PowerPoint deck plus JSON output.</p>
       <p class="sub small">Best for wide-format survey data with one row per respondent and one column per question.</p>
-      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+      {% if error_card %}
+      <div class="error-card error-card-{{ error_card.severity or 'error' }}">
+        <div class="error-card-title">{{ error_card.title }}</div>
+        <div class="error-card-message">{{ error_card.message }}</div>
+        {% if error_card.hint %}
+        <div class="error-card-hint">{{ error_card.hint }}</div>
+        {% endif %}
+      </div>
+      {% elif error %}<div class="error">{{ error }}</div>{% endif %}
       <form action="/upload" method="post" enctype="multipart/form-data" class="upload-form" id="uploadForm">
         <label class="upload-box">
           <span>CSV file</span>

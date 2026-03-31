@@ -50,7 +50,9 @@ class TestWebMapping(unittest.TestCase):
         self.assertTrue(payload["redirect_url"].endswith(f"/mapping/{payload['job_id']}"))
         follow = client.get(payload["redirect_url"])
         self.assertEqual(follow.status_code, 200)
-        self.assertIn("Run + download", follow.get_data(as_text=True))
+        follow_html = follow.get_data(as_text=True)
+        self.assertIn("Run KDA", follow_html)
+        self.assertIn("Show all candidates", follow_html)
 
     def test_inspect_renders_column_inspector(self):
         client = app.test_client()
@@ -68,7 +70,7 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn("Adjust data setup", html)
         self.assertIn("Analysis setup", html)
         self.assertIn("Segments", html)
-        self.assertIn("Run + download", html)
+        self.assertIn("Run KDA", html)
         self.assertIn("Ready to run", html)
         self.assertIn("toggleInspectorButton", html)
         self.assertIn("segmentColumnSearch", html)
@@ -90,7 +92,8 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn("recommendedOutcomeReason", html)
         self.assertIn("Also considered:", html)
         self.assertNotIn("(12.0)", html)
-        self.assertIn("Nested condition tree", html)
+        self.assertIn("Advanced nested conditions", html)
+        self.assertIn("Show advanced", html)
         self.assertIn("segmentTreeCanvas", html)
         self.assertIn("overall_sat", html)
         self.assertIn("high_cardinality", html)
@@ -316,6 +319,10 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn("return nested && nested !== 'No rules saved yet.' ? `(${nested})` : ''", html)
         self.assertNotIn('<pre>${escapeHtml(JSON.stringify(seg.tree, null, 2))}</pre>', html)
         self.assertIn('Loaded segment ${index + 1} into the ${loadedSimple ? \'simple + nested\' : \'nested\'} builder.', html)
+        self.assertIn('Editing saved segment', html)
+        self.assertIn('Update segment', html)
+        self.assertIn('Update nested segment', html)
+        self.assertIn('Cancel edit', html)
         self.assertIn('Builder synced for multi-clause editing.', html)
         self.assertIn('labeledHelperSuggestions', html)
         self.assertIn('segmentValueSuggestionCard', html)
@@ -377,6 +384,8 @@ class TestWebMapping(unittest.TestCase):
         html = mapping_response.get_data(as_text=True)
         self.assertIn('Enterprise APAC or Mid-Market EMEA', html)
         self.assertIn('savedSegmentDefs', html)
+        self.assertIn('editingSegmentIndex', html)
+        self.assertIn('editingSegmentMode', html)
         self.assertIn('segmentTreeState = treeNodeFromBackend(segment.tree || { all: [] });', html)
         self.assertIn("const nested = describeSegmentTree(child);", html)
         self.assertIn("return nested && nested !== 'No rules saved yet.' ? `(${nested})` : '';", html)
@@ -406,6 +415,44 @@ class TestWebMapping(unittest.TestCase):
         self.assertTrue(INSPECT_ERROR_LOG.exists())
         log_text = INSPECT_ERROR_LOG.read_text(encoding="utf-8")
         self.assertIn("broken inspect step", log_text)
+
+    def test_inspect_rejects_non_survey_like_file_with_clear_message(self):
+        client = app.test_client()
+        csv_bytes = (
+            b"Date Added,Phone,First name,Last name,Email\n"
+            b"2026-01-01,15555550123,Jane,Doe,jane@example.com\n"
+            b"2026-01-02,15555550124,John,Smith,john@example.com\n"
+        )
+
+        response = client.post(
+            "/inspect",
+            data={"survey_file": (io.BytesIO(csv_bytes), "crm_export.csv")},
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(response.status_code, 500)
+        html = response.get_data(as_text=True)
+        self.assertIn("This file does not look like survey analysis input", html)
+        self.assertIn("does not look like analyzable survey input yet", html)
+
+    def test_inspect_rejects_too_thin_file_with_clear_message(self):
+        client = app.test_client()
+        csv_bytes = (
+            b"Q1,Q2,ResponseId\n"
+            b"5,4,R_1\n"
+            b"4,5,R_2\n"
+        )
+
+        response = client.post(
+            "/inspect",
+            data={"survey_file": (io.BytesIO(csv_bytes), "too_thin.csv")},
+            content_type="multipart/form-data",
+        )
+
+        self.assertEqual(response.status_code, 500)
+        html = response.get_data(as_text=True)
+        self.assertIn("This file is too thin for KDA", html)
+        self.assertIn("looks too thin for KDA", html)
 
     def test_mapping_page_includes_recode_create_handler(self):
         client = app.test_client()
@@ -524,7 +571,9 @@ class TestWebMapping(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.get_data(as_text=True)
         self.assertIn("Enterprise only", html)
-        self.assertIn("Segment summaries", html)
+        self.assertIn("Segment insights", html)
+        self.assertIn("Top actions to prioritize", html)
+        self.assertIn("Deliverables", html)
 
 
 if __name__ == "__main__":

@@ -5,6 +5,7 @@ import json
 import os
 import re
 import subprocess
+import time
 import traceback
 import uuid
 from functools import wraps
@@ -38,6 +39,36 @@ MAX_INLINE_COLUMN_PROFILES = 40
 class Args:
     target = None
     predictors = None
+
+
+def _index_error_payload(message: str, *, title: str = "Upload issue", hint: str | None = None, severity: str = "error") -> dict:
+    return {
+        "title": title,
+        "message": message,
+        "hint": hint,
+        "severity": severity,
+    }
+
+
+def _friendly_inspect_error(exc: Exception, error_id: str) -> dict:
+    text = str(exc)
+    if "does not look like analyzable survey input yet" in text:
+        return _index_error_payload(
+            text,
+            title="This file does not look like survey analysis input",
+            hint="Upload a wide survey-style CSV with one row per respondent and several scored question columns. CRM/contact exports, lead lists, and mostly-administrative files are not valid KDA inputs.",
+        )
+    if "looks too thin for KDA" in text:
+        return _index_error_payload(
+            text,
+            title="This file is too thin for KDA",
+            hint="Tundralis needs an outcome plus multiple candidate driver columns. Very small extracts, ID-only files, or heavily stripped exports will not work.",
+        )
+    return _index_error_payload(
+        f"Inspect failed ({error_id}). {text}",
+        title="We could not prepare this file",
+        hint=f"The failure was logged to {INSPECT_ERROR_LOG}. If this was meant to be a real survey dataset, the next step is to inspect the file structure or export format rather than retry blindly.",
+    )
 
 
 def _auth_ok() -> bool:
@@ -926,6 +957,19 @@ def _mapping_context(
     df = bundle.working_df
     columns = list(df.columns)
     numeric_columns = df.select_dtypes(include="number").columns.tolist()
+    non_metadata_numeric_columns = [
+        col for col in numeric_columns
+        if not str(col).lower().endswith(('id', 'zip'))
+        and str(col).lower() not in {'progress', 'duration (in seconds)', 'finished', 'status'}
+    ]
+    if len(columns) < 5:
+        raise ValueError(
+            "This file looks too thin for KDA. Upload a survey-style dataset with an outcome plus multiple candidate driver columns."
+        )
+    if len(non_metadata_numeric_columns) < 3:
+        raise ValueError(
+            "This file does not look like analyzable survey input yet. Tundralis needs several survey-style numeric fields, not mostly IDs, contact fields, or operational columns."
+        )
     effective_column_profiles = _apply_semantic_overrides(bundle.column_profiles, mapping_state.get("semantic_overrides"))
     recommendation = _build_recommendation(
         columns,
@@ -1012,6 +1056,7 @@ def _log_inspect_failure(job_id: str, upload_path: Path, exc: Exception) -> str:
 
 @app.before_request
 def _trace_inspect_request():
+    request.environ["tundralis_started_at"] = time.perf_counter()
     if request.path not in {"/inspect", "/upload"}:
         return None
     content_length = request.content_length or 0
@@ -1027,6 +1072,28 @@ def _trace_inspect_request():
         },
     )
     return None
+
+
+@app.after_request
+def _trace_request_timing(response):
+    started = request.environ.get("tundralis_started_at")
+    if started is None:
+        return response
+    elapsed_ms = round((time.perf_counter() - started) * 1000, 1)
+    response.headers["X-Tundralis-Elapsed-Ms"] = str(elapsed_ms)
+    if request.path in {"/inspect", "/upload", "/preview", "/run"}:
+        _append_log(
+            REQUEST_ERROR_LOG,
+            "request timing",
+            {
+                "path": request.path,
+                "method": request.method,
+                "status": response.status_code,
+                "elapsed_ms": elapsed_ms,
+                "content_length": request.content_length or 0,
+            },
+        )
+    return response
 
 
 @app.errorhandler(Exception)
@@ -1066,8 +1133,7 @@ def mapping_page(job_id: str):
         context = _mapping_context(filename, job_id=job_id, mapping_state=mapping_state)
     except Exception as exc:
         error_id = _log_inspect_failure(job_id, UPLOAD_DIR / filename, exc)
-        message = f"Inspect failed ({error_id}): {exc}. Logged to {INSPECT_ERROR_LOG}."
-        return render_template("index.html", error=message), 500
+        return render_template("index.html", error_card=_friendly_inspect_error(exc, error_id)), 500
     return render_template("mapping.html", **context)
 
 
@@ -1100,7 +1166,10 @@ def upload_file():
     if not f or not f.filename:
         if wants_json:
             return jsonify({"error": "Upload a CSV first."}), 400
-        return render_template("index.html", error="Upload a CSV first."), 400
+        return render_template(
+            "index.html",
+            error_card=_index_error_payload("Upload a CSV first.", title="Missing file", hint="Choose a CSV export before starting the inspect flow."),
+        ), 400
 
     job_id = uuid.uuid4().hex[:12]
     upload_path = UPLOAD_DIR / f"{job_id}_{Path(f.filename).name}"
@@ -1120,7 +1189,10 @@ def inspect_file():
     if not f or not f.filename:
         if wants_json:
             return jsonify({"error": "Upload a CSV first."}), 400
-        return render_template("index.html", error="Upload a CSV first."), 400
+        return render_template(
+            "index.html",
+            error_card=_index_error_payload("Upload a CSV first.", title="Missing file", hint="Choose a CSV export before starting the inspect flow."),
+        ), 400
 
     job_id = uuid.uuid4().hex[:12]
     upload_path = UPLOAD_DIR / f"{job_id}_{Path(f.filename).name}"
@@ -1133,7 +1205,7 @@ def inspect_file():
         message = f"Inspect failed ({error_id}): {exc}. Logged to {INSPECT_ERROR_LOG}."
         if wants_json:
             return jsonify({"error": message, "error_id": error_id, "log_path": str(INSPECT_ERROR_LOG)}), 500
-        return render_template("index.html", error=message), 500
+        return render_template("index.html", error_card=_friendly_inspect_error(exc, error_id)), 500
 
     redirect_url = url_for("mapping_page", job_id=job_id)
     if wants_json:

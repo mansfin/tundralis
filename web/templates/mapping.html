@@ -80,8 +80,7 @@
                     <p class="sub small" id="recommendationStatus">Review suggested setup</p>
                   </div>
                 </div>
-                <p class="sub small">Tundralis selected one likely outcome variable, included candidate driver questions, and excluded fields that should not be modeled.</p>
-                <div id="mappingDebug" class="sub small mono" style="white-space: pre-wrap; opacity: 0.75;"></div>
+                <p class="sub small">Tundralis selected a recommended outcome and driver set. Review it if something looks off, or run it as-is.</p>
                 <div id="schemaConfidenceBanner" class="schema-banner">
                   <div class="schema-banner-title" id="schemaConfidenceTitle">Review suggested schema</div>
                   <div class="schema-banner-copy" id="schemaConfidenceCopy">Tundralis is checking whether this file includes descriptive labels or code-style field names.</div>
@@ -118,23 +117,24 @@
                   <div id="schemaHint" class="sub small"></div>
                   <div id="recommendationDetailsPanel" class="recommendation-detail-list hidden"></div>
                 </div>
-                <div class="field-grid recommendation-summary-grid">
-                  <div class="selected-item">
+                <div class="recommendation-confidence-strip" id="recommendationConfidenceStrip"></div>
+                <div class="field-grid recommendation-summary-grid recommendation-summary-grid-secondary">
+                  <div class="selected-item compact-summary">
                     <label class="field-label">Possible segment cuts</label>
                     <strong id="candidateSegmentCount">0</strong>
                     <div class="sub small" id="candidateSegmentCopy">Fields that may be better used for breakouts than modeling.</div>
                   </div>
-                  <div class="selected-item">
+                  <div class="selected-item compact-summary">
                     <label class="field-label">Helper/admin fields</label>
                     <strong id="helperFieldCount">0</strong>
                     <div class="sub small" id="helperFieldCopy">Operational, routing, or export-helper columns to ignore.</div>
                   </div>
-                  <div class="selected-item">
+                  <div class="selected-item compact-summary">
                     <label class="field-label">Needs clarification</label>
                     <strong id="ambiguousFieldCount">0</strong>
                     <div class="sub small" id="ambiguousFieldCopy">Numeric fields that may need scale/code context before trust is high.</div>
                   </div>
-                  <div class="selected-item">
+                  <div class="selected-item compact-summary">
                     <label class="field-label">Schema notes</label>
                     <div id="ambiguitySummaryPanel" class="sub small">No extra schema guidance yet.</div>
                   </div>
@@ -145,19 +145,22 @@
                   <button type="button" class="button-link secondary" id="openAdjustDataButton">Adjust data setup</button>
                   <button type="button" class="button-link secondary" id="openSegmentsButton">Add segments</button>
                 </div>
-                <div class="selected-item recommendation-tools">
+                <div class="selected-item recommendation-tools collapsed-section">
                   <div class="selected-item-head">
                     <span>Improve labels</span>
+                    <button type="button" class="button-link secondary" id="toggleLabelTools">Show tools</button>
                   </div>
-                  <p class="sub small">Optional. If this file uses code-style fields, upload a simple codebook or rename the recommended fields below.</p>
-                  <div class="actions">
-                    <label class="upload-box small-upload-box">
-                      <input type="file" id="codebookFileInput" accept=".csv,text/csv">
-                      <span>Upload codebook CSV</span>
-                    </label>
-                    <button type="button" class="button-link secondary" id="applyCodebookButton">Apply codebook</button>
+                  <div id="labelToolsPanel" class="hidden">
+                    <p class="sub small">Optional. If this file uses code-style fields, upload a simple codebook or rename the recommended fields below.</p>
+                    <div class="actions">
+                      <label class="upload-box small-upload-box">
+                        <input type="file" id="codebookFileInput" accept=".csv,text/csv">
+                        <span>Upload codebook CSV</span>
+                      </label>
+                      <button type="button" class="button-link secondary" id="applyCodebookButton">Apply codebook</button>
+                    </div>
+                    <div id="labelUpgradeStatus" class="sub small"></div>
                   </div>
-                  <div id="labelUpgradeStatus" class="sub small"></div>
                 </div>
               </div>
 
@@ -189,20 +192,34 @@
                 <div class="section-head block">
                   <div>
                     <h2>Drivers</h2>
-                    <p class="sub small">These fields look like candidate drivers of the outcome. Click any field name to inspect it.</p>
+                    <p class="sub small">Start with the recommended shortlist. Open the full candidate pool only if you want to override it.</p>
                   </div>
                 </div>
-                <div class="selected-item">
-                  <label class="field-label">Recommended field labels</label>
-                  <div id="recommendedRenamePanel" class="recommended-rename-panel"></div>
+                <div class="selected-item collapsed-section">
+                  <div class="selected-item-head">
+                    <label class="field-label no-margin">Recommended field labels</label>
+                    <button type="button" class="button-link secondary" id="toggleRecommendedRenames">Show labels</button>
+                  </div>
+                  <div id="recommendedRenamePanel" class="recommended-rename-panel hidden"></div>
                 </div>
 
                 <div class="field-grid two predictor-package-layout">
                   <div>
+                    <div class="selected-item predictor-shortlist-card">
+                      <div class="selected-item-head">
+                        <span>Recommended shortlist</span>
+                        <span class="sub small" id="predictorShortlistMeta">Top suggested drivers</span>
+                      </div>
+                      <div id="predictorShortlist" class="selected-package compact-stack"></div>
+                    </div>
                     <label class="field-label">Candidate driver fields</label>
                     <div class="picker-card">
+                      <div class="selected-item-head compact-head">
+                        <span class="sub small">Additional candidates</span>
+                        <button type="button" class="button-link secondary" id="toggleAllPredictors">Show all candidates</button>
+                      </div>
                       <input type="text" id="predictorSearch" class="search-input" placeholder="Search driver fields...">
-                      <div class="picker-list" id="predictorPicker"></div>
+                      <div class="picker-list hidden" id="predictorPicker"></div>
                     </div>
                   </div>
 
@@ -269,6 +286,7 @@
                       <div class="inline-actions" id="segmentValueSuggestionList"></div>
                     </div>
 
+                    <div id="segmentBuilderModeCard" class="selected-item segment-builder-mode-card hidden"></div>
                     <div id="segmentBuilderStatus" class="empty-state compact hidden"></div>
 
                     <div class="segment-builder-shell">
@@ -276,17 +294,25 @@
                         <label class="field-label small">Simple rule draft</label>
                         <div class="selected-package" id="segmentRuleDraft"></div>
                       </div>
-                      <div class="segment-builder-column">
-                        <div class="selected-item-head segment-tree-head">
-                          <label class="field-label small">Nested condition tree</label>
-                          <div class="inline-actions">
-                            <button type="button" class="button-link secondary" id="resetSegmentTree">Reset tree</button>
-                            <button type="button" class="button-link secondary" id="refreshPrepPreview">Refresh previews</button>
+                      <div class="segment-builder-column advanced-segment-column">
+                        <div class="selected-item advanced-toggle-card">
+                          <div class="selected-item-head segment-tree-head">
+                            <div>
+                              <label class="field-label small no-margin">Advanced nested conditions</label>
+                              <div class="sub small">Use this only when the simple AND/OR builder is not enough.</div>
+                            </div>
+                            <button type="button" class="button-link secondary" id="toggleAdvancedSegmentBuilder">Show advanced</button>
                           </div>
-                        </div>
-                        <div id="segmentTreeCanvas" class="segment-tree-canvas"></div>
-                        <div class="picker-toolbar">
-                          <button type="button" class="button-link secondary" id="saveNestedSegmentDefinition">Save nested segment</button>
+                          <div id="advancedSegmentBuilderPanel" class="hidden">
+                            <div class="inline-actions nested-actions-row">
+                              <button type="button" class="button-link secondary" id="resetSegmentTree">Reset tree</button>
+                              <button type="button" class="button-link secondary" id="refreshPrepPreview">Refresh previews</button>
+                            </div>
+                            <div id="segmentTreeCanvas" class="segment-tree-canvas"></div>
+                            <div class="picker-toolbar">
+                              <button type="button" class="button-link secondary" id="saveNestedSegmentDefinition">Save nested segment</button>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -296,6 +322,7 @@
 
                     <div class="actions module-actions">
                       <button type="button" class="button-link" id="saveSegmentDefinition">Save simple segment</button>
+                      <button type="button" class="button-link secondary hidden" id="cancelSegmentEdit">Cancel edit</button>
                       <button type="button" class="button-link" id="resetSegmentBuilder">Clear builder</button>
                       <button type="button" class="button-link" id="backToModelTab">Back to analysis setup</button>
                       <button type="button" class="button-link" id="goToConfirmTab">Continue to run + download</button>
@@ -308,8 +335,8 @@
             <section class="card inner workflow-panel hidden" data-panel="confirm">
               <div class="section-head block">
                 <div>
-                  <h2>Run + download</h2>
-                  <p class="sub small">Final check before the model runs. Review the recommended setup, optional adjustments, and segments here.</p>
+                  <h2>Run KDA</h2>
+                  <p class="sub small">Quick pre-flight check before the model runs.</p>
                 </div>
               </div>
 
@@ -344,18 +371,24 @@
                 <div id="confirmValidationMessage" class="sub small">Checking inputs…</div>
               </div>
 
-              <div class="field-grid three">
-                <div class="selected-item">
-                  <label class="field-label">Selected drivers</label>
-                  <div class="selected-package" id="confirmPredictorList"></div>
+              <div class="selected-item collapsed-section confirm-details-card">
+                <div class="selected-item-head">
+                  <span>Review details</span>
+                  <button type="button" class="button-link secondary" id="toggleConfirmDetails">Show details</button>
                 </div>
-                <div class="selected-item">
-                  <label class="field-label">Saved adjustments</label>
-                  <div class="selected-package" id="confirmRecodeList"></div>
-                </div>
-                <div class="selected-item">
-                  <label class="field-label">Saved segments</label>
-                  <div class="selected-package" id="confirmSegmentList"></div>
+                <div id="confirmDetailsPanel" class="field-grid three hidden">
+                  <div>
+                    <label class="field-label">Selected drivers</label>
+                    <div class="selected-package" id="confirmPredictorList"></div>
+                  </div>
+                  <div>
+                    <label class="field-label">Saved adjustments</label>
+                    <div class="selected-package" id="confirmRecodeList"></div>
+                  </div>
+                  <div>
+                    <label class="field-label">Saved segments</label>
+                    <div class="selected-package" id="confirmSegmentList"></div>
+                  </div>
                 </div>
               </div>
 
@@ -437,14 +470,9 @@
     let columnProfileCount = {{ column_profile_count | default(0, true) | tojson }};
     let draftMapRules = [];
     let draftBucketRules = [];
+    let editingSegmentIndex = null;
+    let editingSegmentMode = null;
     let editingRecodeIndex = null;
-
-    document.addEventListener('DOMContentLoaded', () => {
-      const earlyDebug = document.getElementById('mappingDebug');
-      if (earlyDebug && !earlyDebug.textContent) {
-        earlyDebug.textContent = `dom-content-loaded :: cols=${currentColumns.length}, numeric=${currentNumericColumns.length}, target=${currentTarget || '∅'}, predictors=${savedPredictorSelections.length}`;
-      }
-    });
 
     let segmentTreeState = createEmptyGroup('all');
 
@@ -598,6 +626,7 @@
     const savedSegments = document.getElementById('savedSegments');
     const segmentPreviewList = document.getElementById('segmentPreviewList');
     const segmentName = document.getElementById('segmentName');
+    const segmentBuilderModeCard = document.getElementById('segmentBuilderModeCard');
     const segmentLogic = document.getElementById('segmentLogic');
     const segmentRuleColumn = document.getElementById('segmentRuleColumn');
     const segmentRuleOperator = document.getElementById('segmentRuleOperator');
@@ -631,6 +660,8 @@
     const savedRecodes = document.getElementById('savedRecodes');
     const predictorSearch = document.getElementById('predictorSearch');
     const predictorPicker = document.getElementById('predictorPicker');
+    const predictorShortlist = document.getElementById('predictorShortlist');
+    const predictorShortlistMeta = document.getElementById('predictorShortlistMeta');
     const selectedPredictorPackage = document.getElementById('selectedPredictorPackage');
     const segmentColumnSearch = document.getElementById('segmentColumnSearch');
     const workflowTabs = Array.from(document.querySelectorAll('.workflow-tab'));
@@ -652,6 +683,7 @@
     const recommendationDriverCount = document.getElementById('recommendationDriverCount');
     const recommendationExcludedCount = document.getElementById('recommendationExcludedCount');
     const recommendationUsableRows = document.getElementById('recommendationUsableRows');
+    const recommendationConfidenceStrip = document.getElementById('recommendationConfidenceStrip');
     const recommendationExplanation = document.getElementById('recommendationExplanation');
     const recommendationDetailsPanel = document.getElementById('recommendationDetailsPanel');
     const schemaHint = document.getElementById('schemaHint');
@@ -670,9 +702,18 @@
     const applyCodebookButton = document.getElementById('applyCodebookButton');
     const labelUpgradeStatus = document.getElementById('labelUpgradeStatus');
     const recommendedRenamePanel = document.getElementById('recommendedRenamePanel');
+    const toggleAllPredictors = document.getElementById('toggleAllPredictors');
     const codedCategoryHelperCard = document.getElementById('codedCategoryHelperCard');
     const codedCategoryHelperCopy = document.getElementById('codedCategoryHelperCopy');
     const codedCategoryHelperPanel = document.getElementById('codedCategoryHelperPanel');
+    const labelToolsPanel = document.getElementById('labelToolsPanel');
+    const recommendedRenameToggle = document.getElementById('toggleRecommendedRenames');
+    const confirmDetailsPanel = document.getElementById('confirmDetailsPanel');
+    const toggleConfirmDetails = document.getElementById('toggleConfirmDetails');
+    const advancedSegmentBuilderPanel = document.getElementById('advancedSegmentBuilderPanel');
+    const saveSegmentDefinitionButton = document.getElementById('saveSegmentDefinition');
+    const saveNestedSegmentDefinitionButton = document.getElementById('saveNestedSegmentDefinition');
+    const cancelSegmentEditButton = document.getElementById('cancelSegmentEdit');
 
     function escapeHtml(value) {
       return String(value ?? '')
@@ -807,6 +848,10 @@
       } else {
         recommendationStatus.textContent = overrideCount ? 'Still needs review, but using your clarifications' : 'We need your input';
       }
+      recommendationConfidenceStrip.innerHTML = `
+        <div class="confidence-pill confidence-${escapeHtml(confidence)}">${confidence === 'high' ? 'High confidence recommendation' : confidence === 'medium' ? 'Review recommended' : 'Needs clarification'}</div>
+        <div class="confidence-strip-copy">${predictors.length} recommended driver${predictors.length === 1 ? '' : 's'} · ${candidateSegments.length} possible segment cut${candidateSegments.length === 1 ? '' : 's'} · ${ambiguousFields.length} field${ambiguousFields.length === 1 ? '' : 's'} needing review</div>
+      `;
       renderSchemaConfidenceBanner(confidence);
 
       const exclusionReasonCounts = {};
@@ -875,13 +920,11 @@
       });
     }
 
-    const mappingDebug = document.getElementById('mappingDebug');
-    const debugState = [];
-    function pushDebug(label, extra = '') {
-      debugState.push(`${label}${extra ? ` :: ${extra}` : ''}`);
-      if (mappingDebug) {
-        mappingDebug.textContent = debugState.slice(-12).join('\n');
-      }
+    function syncSectionToggle(button, panel, expandedLabel = 'Hide details', collapsedLabel = 'Show details') {
+      if (!button || !panel) return;
+      const expanded = !panel.classList.contains('hidden');
+      button.textContent = expanded ? expandedLabel : collapsedLabel;
+      button.setAttribute('aria-expanded', String(expanded));
     }
 
     function updateConfirmationPanel() {
@@ -922,6 +965,27 @@
       }
       el.className = `segment-status ${tone}`;
       el.textContent = message;
+    }
+
+    function syncSegmentBuilderMode() {
+      const editing = editingSegmentIndex !== null;
+      if (!segmentBuilderModeCard || !saveSegmentDefinitionButton || !saveNestedSegmentDefinitionButton || !cancelSegmentEditButton) return;
+      cancelSegmentEditButton.classList.toggle('hidden', !editing);
+      saveSegmentDefinitionButton.textContent = editing && editingSegmentMode === 'simple' ? 'Update segment' : 'Save simple segment';
+      saveNestedSegmentDefinitionButton.textContent = editing && editingSegmentMode === 'nested' ? 'Update nested segment' : 'Save nested segment';
+      if (!editing) {
+        segmentBuilderModeCard.classList.add('hidden');
+        segmentBuilderModeCard.innerHTML = '';
+        return;
+      }
+      segmentBuilderModeCard.classList.remove('hidden');
+      segmentBuilderModeCard.innerHTML = `
+        <div class="selected-item-head compact-head">
+          <strong>Editing saved segment</strong>
+          <span class="pill">${editingSegmentMode === 'nested' ? 'nested' : 'simple'}</span>
+        </div>
+        <div class="sub small">You are editing <strong>${escapeHtml(segmentName.value || 'Untitled segment')}</strong>. Saving now will update the existing segment instead of creating a duplicate.</div>
+      `;
     }
 
     function selectedRecodeOutputName() {
@@ -1584,6 +1648,10 @@
         }));
     }
 
+    function shortlistPredictorCandidates(candidates) {
+      return candidates.slice(0, recommendationState.driver_shortlist_limit || 10);
+    }
+
     function rebuildTargetOptions() {
       const previous = targetColumnSelect.value || currentTarget;
       const optionNames = [];
@@ -1613,6 +1681,22 @@
       const selected = new Set(currentPredictorSelections());
       savedPredictorSelections = Array.from(selected);
       const candidates = predictorCandidates();
+      const shortlist = shortlistPredictorCandidates(candidates);
+      predictorShortlistMeta.textContent = `${shortlist.length} top suggestions${candidates.length > shortlist.length ? ` · ${candidates.length - shortlist.length} more available` : ''}`;
+      predictorShortlist.innerHTML = shortlist.length
+        ? shortlist.map((item) => {
+            const displayLabel = displayNameValue(item.name);
+            const selectedBadge = selected.has(item.name) ? '<span class="pill numeric">selected</span>' : '<span class="pill">recommended</span>';
+            return `
+              <div class="selected-item compact-card" data-shortlist-item="${escapeHtml(item.name)}">
+                <div class="selected-item-head compact-head">
+                  <button type="button" class="column-link js-inspect-link" data-column-name="${escapeHtml(item.name)}">${escapeHtml(displayLabel || item.name)}</button>
+                  ${selectedBadge}
+                </div>
+                <div class="sub small">${escapeHtml((item.reasons || []).slice(0, 2).join(' · ') || 'Recommended by Tundralis')}</div>
+              </div>`;
+          }).join('')
+        : '<div class="empty-state compact">No recommended drivers yet.</div>';
       predictorPicker.innerHTML = candidates.map((item) => `
         <label class="picker-item js-inspect-column" data-col="${escapeHtml(item.name.toLowerCase())}" data-column-name="${escapeHtml(item.name)}">
           <input type="checkbox" name="predictor_columns" value="${escapeHtml(item.name)}" ${selected.has(item.name) ? 'checked' : ''}>
@@ -1630,8 +1714,8 @@
             const displayLabel = displayNameValue(name);
             const showRawName = displayLabel && displayLabel !== name;
             return `
-              <div class="selected-item" data-selected-item="${escapeHtml(name)}">
-                <div class="selected-item-head">
+              <div class="selected-item compact-card" data-selected-item="${escapeHtml(name)}">
+                <div class="selected-item-head compact-head">
                   <button type="button" class="column-link js-inspect-link" data-column-name="${escapeHtml(name)}">${escapeHtml(displayLabel || name)}</button>
                   <span class="pill ${kind}">${kind}</span>
                 </div>
@@ -1723,6 +1807,8 @@
 
     function resetSegmentBuilder() {
       draftRules = [];
+      editingSegmentIndex = null;
+      editingSegmentMode = null;
       segmentName.value = '';
       segmentLogic.value = 'AND';
       segmentTreeState = createEmptyGroup('all');
@@ -1730,6 +1816,7 @@
       segmentRuleValue.value = '';
       renderDraftRules();
       setStatus(segmentBuilderStatus, '');
+      syncSegmentBuilderMode();
       updateStepAvailability();
     }
 
@@ -1782,11 +1869,14 @@
     }
 
     function loadSegmentIntoBuilder(segment, index) {
+      editingSegmentIndex = index;
       segmentName.value = segment.name || '';
       const tree = segment.tree || {};
       const loadedSimple = syncDraftRulesFromTree(tree);
+      editingSegmentMode = loadedSimple ? 'simple' : 'nested';
       segmentTreeState = treeNodeFromBackend(segment.tree || { all: [] });
       renderSegmentTree();
+      syncSegmentBuilderMode();
       setStatus(segmentBuilderStatus, `Loaded segment ${index + 1} into the ${loadedSimple ? 'simple + nested' : 'nested'} builder.`, 'info');
       setWorkflowTab('segment');
     }
@@ -1839,10 +1929,13 @@
       savedSegments.innerHTML = savedSegmentDefs.length ? '' : '<div class="empty-state">No saved segments yet.</div>';
       savedSegmentDefs.forEach((seg, idx) => {
         const el = document.createElement('div');
-        el.className = 'selected-item';
+        el.className = 'selected-item compact-card';
         el.innerHTML = `
-          <div class="selected-item-head">
-            <span>${escapeHtml(seg.name)}</span>
+          <div class="selected-item-head compact-head">
+            <div>
+              <strong>${escapeHtml(seg.name)}</strong>
+              <div class="sub small">Saved segment</div>
+            </div>
             <div class="inline-actions">
               <button type="button" class="button-link secondary" data-edit-segment="${idx}">Edit</button>
               <button type="button" class="button-link secondary" data-remove-segment="${idx}">Remove</button>
@@ -1855,7 +1948,13 @@
       segmentDefinitionsInput.value = JSON.stringify(savedSegmentDefs);
       document.querySelectorAll('[data-remove-segment]').forEach((btn) => {
         btn.addEventListener('click', async () => {
-          savedSegmentDefs.splice(Number(btn.dataset.removeSegment), 1);
+          const removeIndex = Number(btn.dataset.removeSegment);
+          savedSegmentDefs.splice(removeIndex, 1);
+          if (editingSegmentIndex === removeIndex) {
+            resetSegmentBuilder();
+          } else if (editingSegmentIndex !== null && editingSegmentIndex > removeIndex) {
+            editingSegmentIndex -= 1;
+          }
           renderSavedSegments();
           await refreshPrepPreview();
         });
@@ -1863,8 +1962,7 @@
       document.querySelectorAll('[data-edit-segment]').forEach((btn) => {
         btn.addEventListener('click', () => {
           const index = Number(btn.dataset.editSegment);
-          const [segment] = savedSegmentDefs.splice(index, 1);
-          renderSavedSegments();
+          const segment = savedSegmentDefs[index];
           loadSegmentIntoBuilder(segment, index);
         });
       });
@@ -1931,9 +2029,9 @@
         const isActive = editingRecodeIndex === idx;
         const panelId = `recodePanel_${idx}`;
         const el = document.createElement('div');
-        el.className = 'selected-item recode-card';
+        el.className = 'selected-item recode-card compact-card';
         el.innerHTML = `
-          <div class="selected-item-head">
+          <div class="selected-item-head compact-head">
             <div>
               <strong>${escapeHtml(recode.output_column)}</strong>
               <div class="sub small">${escapeHtml(recode.source_column)} → ${escapeHtml(recode.type)}</div>
@@ -2297,16 +2395,25 @@
         return;
       }
       const key = segmentLogic.value === 'OR' ? 'any' : 'all';
-      savedSegmentDefs.push({ name, tree: { [key]: [...draftRules] } });
+      const priorIndex = editingSegmentIndex;
+      if (priorIndex !== null) {
+        savedSegmentDefs[priorIndex] = { name, tree: { [key]: [...draftRules] } };
+      } else {
+        savedSegmentDefs.push({ name, tree: { [key]: [...draftRules] } });
+      }
       renderSavedSegments();
       const ok = await refreshPrepPreview();
       if (!ok) {
-        savedSegmentDefs.pop();
-        renderSavedSegments();
+        if (priorIndex !== null) {
+          renderSavedSegments();
+        } else {
+          savedSegmentDefs.pop();
+          renderSavedSegments();
+        }
         return;
       }
       resetSegmentBuilder();
-      setStatus(segmentBuilderStatus, `Saved segment '${name}'.`, 'success');
+      setStatus(segmentBuilderStatus, `${priorIndex !== null ? 'Updated' : 'Saved'} segment '${name}'.`, 'success');
     });
 
     document.getElementById('saveNestedSegmentDefinition')?.addEventListener('click', async () => {
@@ -2320,16 +2427,25 @@
         setStatus(segmentBuilderStatus, 'Add at least one valid rule to the nested tree.', 'error');
         return;
       }
-      savedSegmentDefs.push({ name, tree });
+      const priorIndex = editingSegmentIndex;
+      if (priorIndex !== null) {
+        savedSegmentDefs[priorIndex] = { name, tree };
+      } else {
+        savedSegmentDefs.push({ name, tree });
+      }
       renderSavedSegments();
       const ok = await refreshPrepPreview();
       if (!ok) {
-        savedSegmentDefs.pop();
-        renderSavedSegments();
+        if (priorIndex !== null) {
+          renderSavedSegments();
+        } else {
+          savedSegmentDefs.pop();
+          renderSavedSegments();
+        }
         return;
       }
       resetSegmentBuilder();
-      setStatus(segmentBuilderStatus, `Saved nested segment '${name}'.`, 'success');
+      setStatus(segmentBuilderStatus, `${priorIndex !== null ? 'Updated' : 'Saved'} nested segment '${name}'.`, 'success');
     });
 
     function syncInspectorCollapse() {
@@ -2346,6 +2462,27 @@
     }));
     document.getElementById('toggleRecommendationDetails')?.addEventListener('click', () => {
       recommendationDetailsPanel.classList.toggle('hidden');
+      syncSectionToggle(document.getElementById('toggleRecommendationDetails'), recommendationDetailsPanel, 'Hide details', 'See details');
+    });
+    document.getElementById('toggleLabelTools')?.addEventListener('click', () => {
+      labelToolsPanel.classList.toggle('hidden');
+      syncSectionToggle(document.getElementById('toggleLabelTools'), labelToolsPanel, 'Hide tools', 'Show tools');
+    });
+    recommendedRenameToggle?.addEventListener('click', () => {
+      recommendedRenamePanel.classList.toggle('hidden');
+      syncSectionToggle(recommendedRenameToggle, recommendedRenamePanel, 'Hide labels', 'Show labels');
+    });
+    toggleAllPredictors?.addEventListener('click', () => {
+      predictorPicker.classList.toggle('hidden');
+      syncSectionToggle(toggleAllPredictors, predictorPicker, 'Hide candidates', 'Show all candidates');
+    });
+    toggleConfirmDetails?.addEventListener('click', () => {
+      confirmDetailsPanel.classList.toggle('hidden');
+      syncSectionToggle(toggleConfirmDetails, confirmDetailsPanel, 'Hide details', 'Show details');
+    });
+    document.getElementById('toggleAdvancedSegmentBuilder')?.addEventListener('click', () => {
+      advancedSegmentBuilderPanel.classList.toggle('hidden');
+      syncSectionToggle(document.getElementById('toggleAdvancedSegmentBuilder'), advancedSegmentBuilderPanel, 'Hide advanced', 'Show advanced');
     });
     document.getElementById('reviewMappingButton')?.addEventListener('click', () => setWorkflowTab('model'));
     document.getElementById('openAdjustDataButton')?.addEventListener('click', () => setWorkflowTab('recode'));
@@ -2399,6 +2536,10 @@
       renderSegmentTree();
     });
     document.getElementById('resetSegmentBuilder')?.addEventListener('click', resetSegmentBuilder);
+    cancelSegmentEditButton?.addEventListener('click', () => {
+      resetSegmentBuilder();
+      setStatus(segmentBuilderStatus, 'Edit cancelled. Builder reset for a new segment.', 'info');
+    });
     launchRecodeBuilder?.addEventListener('click', async () => {
       try {
         const recode = buildDraftRecodeDefinition();
@@ -2458,7 +2599,12 @@
       rebuildPredictorUI();
     });
 
-    pushDebug('script-loaded', `cols=${currentColumns.length}, numeric=${currentNumericColumns.length}, target=${currentTarget || '∅'}, predictors=${savedPredictorSelections.length}`);
+    syncSectionToggle(document.getElementById('toggleRecommendationDetails'), recommendationDetailsPanel, 'Hide details', 'See details');
+    syncSectionToggle(document.getElementById('toggleLabelTools'), labelToolsPanel, 'Hide tools', 'Show tools');
+    syncSectionToggle(recommendedRenameToggle, recommendedRenamePanel, 'Hide labels', 'Show labels');
+    syncSectionToggle(toggleAllPredictors, predictorPicker, 'Hide candidates', 'Show all candidates');
+    syncSectionToggle(toggleConfirmDetails, confirmDetailsPanel, 'Hide details', 'Show details');
+    syncSectionToggle(document.getElementById('toggleAdvancedSegmentBuilder'), advancedSegmentBuilderPanel, 'Hide advanced', 'Show advanced');
 
     const initSteps = [
       ['rebuildTargetOptions', () => rebuildTargetOptions()],
@@ -2470,6 +2616,7 @@
       ['rebuildSegmentColumnsUI', () => rebuildSegmentColumnsUI()],
       ['renderDraftRules', () => renderDraftRules()],
       ['renderSavedSegments', () => renderSavedSegments()],
+      ['syncSegmentBuilderMode', () => syncSegmentBuilderMode()],
       ['renderSegmentPreviews', () => renderSegmentPreviews()],
       ['renderSavedRecodes', () => renderSavedRecodes()],
       ['updateRecodeDraftUi', () => updateRecodeDraftUi()],
@@ -2484,11 +2631,8 @@
 
     initSteps.forEach(([name, fn]) => {
       try {
-        pushDebug(`start:${name}`);
         fn();
-        pushDebug(`ok:${name}`, `targetOptions=${targetColumnSelect?.options?.length ?? 'na'}, predictors=${document.querySelectorAll('input[name="predictor_columns"]').length}`);
       } catch (error) {
-        pushDebug(`fail:${name}`, error?.message || String(error));
         console.error(`mapping init failed at ${name}`, error);
       }
     });

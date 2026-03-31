@@ -26,6 +26,17 @@ class TestWebIndex(unittest.TestCase):
         self.assertIn("Upload complete. Preparing recommended setup", html)
         self.assertIn("window.location.assign(payload.redirect_url)", html)
 
+    def test_index_renders_structured_error_card(self):
+        client = app.test_client()
+        response = client.get(
+            "/",
+            query_string={},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("Upload your survey data", html)
+
 
 if __name__ == "__main__":
     unittest.main()
