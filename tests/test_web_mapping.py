@@ -454,6 +454,94 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn("This file is too thin for KDA", html)
         self.assertIn("looks too thin for KDA", html)
 
+    def test_results_page_loads_saved_artifacts_for_existing_job(self):
+        client = app.test_client()
+        csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()
+
+        inspect_response = client.post(
+            "/upload",
+            data={"survey_file": (io.BytesIO(csv_bytes), "client_style_kda.csv")},
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+        )
+        payload = inspect_response.get_json()
+        job_id = payload["job_id"]
+        filename = payload["filename"]
+
+        mapping_state = {
+            "target_column": "overall_sat",
+            "predictor_columns": ["product_quality_score", "ease_use_score"],
+            "segment_columns": [],
+            "segment_definitions": [
+                {"name": "Enterprise", "tree": {"all": [{"column": "segment", "operator": "equals", "value": "Enterprise"}]}}
+            ],
+            "recode_definitions": [
+                {"type": "boolean_flag", "source_column": "region", "output_column": "is_apac", "operator": "equals", "value": "APAC"}
+            ],
+            "display_name_map": {"overall_sat": "Overall satisfaction"},
+            "semantic_overrides": {},
+        }
+
+        with patch("tundralis.app._load_mapping_state", return_value=mapping_state), \
+             patch("tundralis.app._mapping_context") as mocked_context, \
+             patch("tundralis.app._write_preview_charts", return_value=["importance_bar.png"]):
+            mocked_context.return_value = {
+                "segment_previews": [{"name": "Enterprise", "matched_count": 120, "matched_pct": 40.0}]
+            }
+            upload_path = ROOT / "app_runtime" / "uploads" / filename
+            upload_path.parent.mkdir(parents=True, exist_ok=True)
+            upload_path.write_bytes(csv_bytes)
+            job_dir = ROOT / "app_runtime" / "artifacts" / job_id
+            job_dir.mkdir(parents=True, exist_ok=True)
+            (job_dir / "report.pptx").write_bytes(b"pptx")
+            (job_dir / "analysis_run.json").write_text(json.dumps({
+                "input_summary": {
+                    "rows_modeled": 300,
+                    "predictor_columns": ["product_quality_score", "ease_use_score"],
+                },
+                "model_diagnostics": {
+                    "r_squared": 0.41,
+                    "adj_r_squared": 0.39,
+                    "method_agreement": "high",
+                    "nonlinear_signal": "unknown",
+                },
+                "drivers": [
+                    {
+                        "driver_label": "Product quality",
+                        "classification": "Core Priority",
+                        "opportunity": {"rank": 1, "score": 0.88},
+                        "performance": {"normalized_mean_0_100": 62.0, "headroom": 0.38},
+                        "impact": {"one_point_dv_change": 0.42},
+                        "importance": {"share_of_explained_variance": 31.2},
+                    },
+                    {
+                        "driver_label": "Ease of use",
+                        "classification": "High-Potential Lever",
+                        "opportunity": {"rank": 2, "score": 0.61},
+                        "performance": {"normalized_mean_0_100": 71.0, "headroom": 0.29},
+                        "impact": {"one_point_dv_change": 0.27},
+                        "importance": {"share_of_explained_variance": 18.6},
+                    },
+                ],
+                "segment_summaries": [],
+            }), encoding="utf-8")
+
+            response = client.get(f"/results/{job_id}")
+
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("Analysis complete", html)
+        self.assertIn("client_style_kda.csv", html)
+        self.assertIn("Enterprise", html)
+        saved_json = (job_dir / "analysis_run.json").read_text(encoding="utf-8")
+        self.assertIn("boolean_flag", saved_json)
+        self.assertIn("segment_previews", saved_json)
+
+    def test_results_page_404s_when_artifacts_missing(self):
+        client = app.test_client()
+        response = client.get("/results/notarealjob")
+        self.assertEqual(response.status_code, 404)
+
     def test_mapping_page_includes_recode_create_handler(self):
         client = app.test_client()
         csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()

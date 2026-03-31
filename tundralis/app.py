@@ -1275,6 +1275,48 @@ def upload_codebook(job_id: str):
     return jsonify({"display_name_map": context["saved_display_name_map"], "recommendation": context["recommendation"]})
 
 
+def _load_result_context(job_id: str, *, logs: str = "") -> dict:
+    filename = _lookup_uploaded_filename(job_id)
+    if not filename:
+        abort(404)
+
+    job_dir = _job_dir(job_id)
+    json_path = job_dir / "analysis_run.json"
+    pptx_path = job_dir / "report.pptx"
+    if not json_path.exists() or not pptx_path.exists():
+        abort(404)
+
+    mapping_state = _load_mapping_state(job_id)
+    data_path = UPLOAD_DIR / filename
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+    payload.setdefault("input_summary", {})["segment_definitions"] = mapping_state.get("segment_definitions", [])
+    payload.setdefault("input_summary", {})["recode_definitions"] = mapping_state.get("recode_definitions", [])
+    payload.setdefault("segment_summaries", payload.get("segment_summaries", []))
+
+    preview_images = sorted(path.name for path in job_dir.glob("*.png"))
+    if not preview_images and data_path.exists():
+        mapping_path = _mapping_path(job_id)
+        if mapping_path.exists():
+            preview_images = _write_preview_charts(job_id, data_path, mapping_path)
+
+    if "segment_previews" not in payload.get("input_summary", {}):
+        try:
+            context = _mapping_context(filename, job_id=job_id, mapping_state=mapping_state)
+            payload.setdefault("input_summary", {})["segment_previews"] = context.get("segment_previews", [])
+        except Exception:
+            payload.setdefault("input_summary", {})["segment_previews"] = []
+
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return {
+        "job_id": job_id,
+        "filename": filename,
+        "display_filename": _display_filename(filename),
+        "payload": payload,
+        "logs": logs,
+        "preview_images": preview_images,
+    }
+
+
 @app.post("/run")
 @basic_auth
 def run_job():
@@ -1352,22 +1394,14 @@ def run_job():
             **context,
         ), 500
 
-    payload = json.loads(json_path.read_text(encoding="utf-8"))
-    payload.setdefault("input_summary", {})["segment_definitions"] = normalized_segments
-    payload.setdefault("input_summary", {})["segment_previews"] = context["segment_previews"]
-    payload.setdefault("input_summary", {})["recode_definitions"] = recode_definitions
-    payload.setdefault("segment_summaries", payload.get("segment_summaries", []))
-    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    preview_images = _write_preview_charts(job_id, data_path, mapping_path)
-    return render_template(
-        "result.html",
-        job_id=job_id,
-        filename=filename,
-        display_filename=_display_filename(filename),
-        payload=payload,
-        logs=result.stdout,
-        preview_images=preview_images,
-    )
+    result_context = _load_result_context(job_id, logs=result.stdout)
+    return render_template("result.html", **result_context)
+
+
+@app.get("/results/<job_id>")
+@basic_auth
+def results_page(job_id: str):
+    return render_template("result.html", **_load_result_context(job_id))
 
 
 @app.get("/artifacts/<job_id>/<path:name>")
