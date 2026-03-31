@@ -889,6 +889,13 @@ def _job_artifacts_exist(job_id: str) -> bool:
     return _job_dir(job_id).exists() and any(_job_dir(job_id).iterdir())
 
 
+def _is_recent_upload(filename: str, *, max_age_seconds: int = 900) -> bool:
+    upload_path = UPLOAD_DIR / filename
+    if not upload_path.exists():
+        return False
+    return (time.time() - upload_path.stat().st_mtime) <= max_age_seconds
+
+
 def _persist_mapping_state(job_id: str, mapping: dict) -> Path:
     mapping_path = _mapping_path(job_id)
     mapping_path.write_text(json.dumps(_normalize_mapping_state(mapping), indent=2), encoding="utf-8")
@@ -1135,6 +1142,8 @@ def index():
 def mapping_page(job_id: str):
     filename = _lookup_uploaded_filename(job_id)
     if not filename:
+        abort(404)
+    if not _mapping_state_exists(job_id) and not _is_recent_upload(filename):
         abort(404)
     if _job_artifacts_exist(job_id) and not _mapping_state_exists(job_id):
         abort(404)

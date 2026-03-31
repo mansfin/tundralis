@@ -593,6 +593,27 @@ class TestWebMapping(unittest.TestCase):
         response = client.get(payload["redirect_url"])
         self.assertEqual(response.status_code, 404)
 
+    def test_mapping_page_404s_for_stale_unpersisted_upload(self):
+        client = app.test_client()
+        csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()
+
+        upload_response = client.post(
+            "/upload",
+            data={"survey_file": (io.BytesIO(csv_bytes), "client_style_kda.csv")},
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+        )
+        self.assertEqual(upload_response.status_code, 200)
+        payload = upload_response.get_json()
+        filename = payload["filename"]
+        upload_path = ROOT / "app_runtime" / "uploads" / filename
+        stale_mtime = upload_path.stat().st_mtime - 3600
+        import os
+        os.utime(upload_path, (stale_mtime, stale_mtime))
+
+        response = client.get(payload["redirect_url"])
+        self.assertEqual(response.status_code, 404)
+
     def test_results_page_404s_when_artifacts_missing(self):
         client = app.test_client()
         response = client.get("/results/notarealjob")
