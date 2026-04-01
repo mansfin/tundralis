@@ -2489,11 +2489,25 @@
     document.getElementById('openSegmentsButton')?.addEventListener('click', () => setWorkflowTab('segment'));
     document.getElementById('runRecommendedButton')?.addEventListener('click', () => {
       updateConfirmationPanel();
-      if (confirmationIssues().length === 0) {
-        document.getElementById('mappingForm')?.requestSubmit(runKdaButton);
+      if (confirmationIssues().length > 0) {
+        setWorkflowTab('confirm');
         return;
       }
-      setWorkflowTab('confirm');
+      savedDisplayNameMap = collectDisplayNameMap();
+      syncDisplayNameHiddenFields();
+      syncSegmentDefinitionInput();
+      syncRecodeDefinitionInput();
+      syncSemanticOverrideInput();
+      if (typeof currentPredictorSelections === 'function') {
+        rebuildPredictorUI();
+      }
+      const form = document.getElementById('mappingForm');
+      if (!form) return;
+      if (typeof form.requestSubmit === 'function') {
+        form.requestSubmit();
+        return;
+      }
+      form.submit();
     });
     applyCodebookButton?.addEventListener('click', async () => {
       const file = codebookFileInput?.files?.[0];

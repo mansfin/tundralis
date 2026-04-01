@@ -697,6 +697,104 @@ class TestWebMapping(unittest.TestCase):
         self.assertIn("Deliverables", durable_html)
         self.assertIn("Enterprise APAC or Mid-Market EMEA", durable_html)
 
+    def test_recommended_run_payload_persists_mapping_and_results(self):
+        client = app.test_client()
+        csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()
+
+        upload_response = client.post(
+            "/upload",
+            data={"survey_file": (io.BytesIO(csv_bytes), "client_style_kda.csv")},
+            content_type="multipart/form-data",
+            headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json"},
+        )
+        self.assertEqual(upload_response.status_code, 200)
+        upload_payload = upload_response.get_json()
+        job_id = upload_payload["job_id"]
+        filename = upload_payload["filename"]
+
+        preview_response = client.post(
+            "/preview",
+            json={
+                "job_id": job_id,
+                "filename": filename,
+                "target_column": "overall_sat",
+                "predictor_columns": [
+                    "product_quality_score",
+                    "ease_use_score",
+                    "support_experience",
+                    "value_for_money",
+                    "onboarding_score",
+                    "service_reliability",
+                    "mobile_app_score",
+                    "acct_mgmt_score",
+                    "reporting_tools",
+                    "integration_setup",
+                ],
+                "segment_columns": ["survey_wave", "region", "segment"],
+                "display_name_map": {
+                    "overall_sat": "Overall Sat",
+                    "product_quality_score": "Product Quality Score",
+                    "ease_use_score": "Ease Use Score",
+                    "support_experience": "Support Experience",
+                    "value_for_money": "Value For Money",
+                    "onboarding_score": "Onboarding Score",
+                    "service_reliability": "Service Reliability",
+                    "mobile_app_score": "Mobile App Score",
+                    "acct_mgmt_score": "Acct Mgmt Score",
+                    "reporting_tools": "Reporting Tools",
+                    "integration_setup": "Integration Setup",
+                },
+                "recode_definitions": [],
+                "segment_definitions": [],
+                "semantic_overrides": {},
+            },
+        )
+        self.assertEqual(preview_response.status_code, 200)
+
+        run_response = client.post(
+            "/run",
+            data={
+                "job_id": job_id,
+                "filename": filename,
+                "target_column": "overall_sat",
+                "predictor_columns": [
+                    "product_quality_score",
+                    "ease_use_score",
+                    "support_experience",
+                    "value_for_money",
+                    "onboarding_score",
+                    "service_reliability",
+                    "mobile_app_score",
+                    "acct_mgmt_score",
+                    "reporting_tools",
+                    "integration_setup",
+                ],
+                "segment_columns": json.dumps(["survey_wave", "region", "segment"]),
+                "display_name__overall_sat": "Overall Sat",
+                "display_name__product_quality_score": "Product Quality Score",
+                "display_name__ease_use_score": "Ease Use Score",
+                "display_name__support_experience": "Support Experience",
+                "display_name__value_for_money": "Value For Money",
+                "display_name__onboarding_score": "Onboarding Score",
+                "display_name__service_reliability": "Service Reliability",
+                "display_name__mobile_app_score": "Mobile App Score",
+                "display_name__acct_mgmt_score": "Acct Mgmt Score",
+                "display_name__reporting_tools": "Reporting Tools",
+                "display_name__integration_setup": "Integration Setup",
+                "segment_definitions": json.dumps([]),
+                "recode_definitions": json.dumps([]),
+                "semantic_overrides": json.dumps({}),
+            },
+        )
+        self.assertEqual(run_response.status_code, 200)
+        self.assertIn("Analysis complete", run_response.get_data(as_text=True))
+
+        mapping_path = ROOT / "app_runtime" / "mappings" / f"{job_id}.json"
+        results_response = client.get(f"/results/{job_id}")
+        self.assertTrue(mapping_path.exists())
+        self.assertEqual(results_response.status_code, 200)
+        self.assertIn("Decision summary", results_response.get_data(as_text=True))
+
     def test_run_persists_effective_semantic_overrides_for_labeled_target(self):
         client = app.test_client()
         csv_bytes = (ROOT / "data" / "fixtures" / "client_style_kda.csv").read_bytes()

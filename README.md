@@ -71,6 +71,29 @@ Operational behavior:
 If you want a durable artifact to revisit, use the results route after a successful run:
 - `/results/<job_id>`
 
+### Windows browser automation note
+
+For OpenClaw browser-node testing on Windows, use a dedicated Chrome automation profile with CDP enabled instead of a normal day-to-day Chrome profile.
+
+Recommended launch pattern:
+
+```powershell
+taskkill /IM chrome.exe /F
+mkdir C:\temp\chrome-debug -ErrorAction SilentlyContinue
+Start-Process "C:\Program Files\Google\Chrome\Application\chrome.exe" '--remote-debugging-address=127.0.0.1 --remote-debugging-port=9222 --user-data-dir="C:\temp\chrome-debug"'
+```
+
+Verify CDP is live:
+
+```powershell
+Invoke-WebRequest http://127.0.0.1:9222/json/version
+```
+
+Why:
+- avoids flaky interaction with a personal Chrome profile
+- keeps browser-node automation stable after terminal/session churn
+- gives OpenClaw a predictable CDP target for browser QA
+
 ### 2. Generate sample data (optional)
 
 ```bash
