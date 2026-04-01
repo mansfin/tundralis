@@ -1,0 +1,76 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>tundralis · jobs</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+  <main class="shell wide">
+    <section class="card">
+      <div class="eyebrow">tundralis</div>
+      <h1>Recent jobs</h1>
+      <p class="sub">Durable view of uploaded files, run status, and results links.</p>
+      <div class="actions">
+        <a class="button-link" href="/">Upload another CSV</a>
+      </div>
+    </section>
+
+    <section class="card inner">
+      <div class="section-head block">
+        <div>
+          <h2>Job history</h2>
+          <p class="sub small">Newest first. Use this to resume mapping, inspect status, or reopen completed results.</p>
+        </div>
+      </div>
+      {% if jobs %}
+      <div class="selected-package">
+        {% for job in jobs %}
+        <div class="selected-item compact-card">
+          <div class="selected-item-head compact-head">
+            <div>
+              <strong>{{ job.display_filename or job.filename or job.job_id }}</strong>
+              <div class="sub small">job {{ job.job_id }} · {{ job.status|replace('_', ' ') }}</div>
+            </div>
+            <span class="pill">{{ job.updated_at or job.created_at or 'unknown time' }}</span>
+          </div>
+          <div class="metric-grid compact">
+            <div class="metric-card"><span>Created</span><strong>{{ job.created_at or '—' }}</strong></div>
+            <div class="metric-card"><span>Updated</span><strong>{{ job.updated_at or '—' }}</strong></div>
+            <div class="metric-card"><span>Rows</span><strong>{{ job.rows_modeled if job.rows_modeled is not none else '—' }}</strong></div>
+            <div class="metric-card"><span>Drivers</span><strong>{{ job.predictor_count if job.predictor_count is not none else '—' }}</strong></div>
+          </div>
+          {% if job.error %}
+          <div class="error-card error-card-error">
+            <div class="error-card-title">Last error</div>
+            <div class="error-card-message">{{ job.error }}</div>
+          </div>
+          {% endif %}
+          <div class="sub small">
+            {% if job.status == 'queued' %}
+            Queued and waiting to start.
+            {% elif job.status == 'running' %}
+            Run is in progress. Refresh this page for completion.
+            {% elif job.status == 'failed' %}
+            Last run failed. Reopen mapping to correct the setup and retry.
+            {% elif job.status == 'completed' %}
+            Results are ready and durable.
+            {% else %}
+            Ready for review or next action.
+            {% endif %}
+          </div>
+          <div class="actions">
+            {% if job.mapping_url %}<a class="button-link secondary" href="{{ job.mapping_url }}">Open mapping</a>{% endif %}
+            {% if job.status_url %}<a class="button-link secondary" href="{{ job.status_url }}">Open status</a>{% endif %}
+            {% if job.results_url %}<a class="button-link" href="{{ job.results_url }}">Open results</a>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="sub">No jobs yet.</p>
+      {% endif %}
+    </section>
+  </main>
+</body>
+</html>

@@ -12,7 +12,17 @@
       <h1>Review your analysis setup</h1>
       <p class="sub">We detected the likely outcome, candidate drivers, and fields to exclude. Review the setup or make changes before running KDA.</p>
       <p class="sub small">File: <strong>{{ display_filename or filename }}</strong></p>
-      {% if error %}<div class="error">{{ error }}</div>{% endif %}
+      {% if job_status in ['queued', 'running'] %}
+      <div class="error-card error-card-warning">
+        <div class="error-card-title">Run in progress</div>
+        <div class="error-card-message">This job is {{ job_status }}. Refresh this page or open Recent jobs to see when results are ready.</div>
+      </div>
+      {% elif job_status == 'failed' and job_status_error %}
+      <div class="error-card error-card-error">
+        <div class="error-card-title">Last run failed</div>
+        <div class="error-card-message">{{ job_status_error }}</div>
+      </div>
+      {% elif error %}<div class="error">{{ error }}</div>{% endif %}
       <form action="/run" method="post" class="mapping-stack" id="mappingForm">
         <input type="hidden" name="job_id" value="{{ job_id }}">
         <input type="hidden" name="filename" value="{{ filename }}">

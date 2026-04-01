@@ -10,8 +10,9 @@ import traceback
 import uuid
 from functools import wraps
 from pathlib import Path
+from threading import Thread
 
-from flask import Flask, Response, abort, jsonify, render_template, request, send_from_directory, url_for
+from flask import Flask, Response, abort, jsonify, redirect, render_template, request, send_from_directory, url_for
 import csv
 import io
 
@@ -26,6 +27,7 @@ RUNTIME_DIR = ROOT / "app_runtime"
 UPLOAD_DIR = RUNTIME_DIR / "uploads"
 MAPPING_DIR = RUNTIME_DIR / "mappings"
 ARTIFACT_DIR = RUNTIME_DIR / "artifacts"
+JOB_REGISTRY_PATH = RUNTIME_DIR / "jobs.json"
 INSPECT_ERROR_LOG = RUNTIME_DIR / "inspect-errors.log"
 REQUEST_ERROR_LOG = RUNTIME_DIR / "request-errors.log"
 for p in [UPLOAD_DIR, MAPPING_DIR, ARTIFACT_DIR]:
@@ -104,6 +106,58 @@ def _job_dir(job_id: str) -> Path:
     p = ARTIFACT_DIR / job_id
     p.mkdir(parents=True, exist_ok=True)
     return p
+
+
+def _utc_now() -> str:
+    return time.strftime("%Y-%m-%d %H:%M:%S UTC", time.gmtime())
+
+
+def _load_job_registry() -> list[dict]:
+    if not JOB_REGISTRY_PATH.exists():
+        return []
+    try:
+        payload = json.loads(JOB_REGISTRY_PATH.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(payload, list):
+        return []
+    return payload
+
+
+def _write_job_registry(rows: list[dict]) -> None:
+    JOB_REGISTRY_PATH.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+
+
+def _job_urls(job_id: str, *, status: str) -> dict:
+    mapping_url = f"/mapping/{job_id}"
+    status_url = f"/jobs/{job_id}"
+    results_url = f"/results/{job_id}" if status == "completed" else None
+    return {"mapping_url": mapping_url, "status_url": status_url, "results_url": results_url}
+
+
+def _upsert_job_record(job_id: str, **updates) -> dict:
+    rows = _load_job_registry()
+    row = next((item for item in rows if item.get("job_id") == job_id), None)
+    if row is None:
+        row = {"job_id": job_id, "created_at": _utc_now()}
+        rows.append(row)
+    row.update({k: v for k, v in updates.items() if v is not None})
+    row["updated_at"] = _utc_now()
+    status = row.get("status") or "uploaded"
+    row.update(_job_urls(job_id, status=status))
+    rows.sort(key=lambda item: item.get("updated_at", ""), reverse=True)
+    _write_job_registry(rows)
+    return row
+
+
+def _get_job_record(job_id: str) -> dict | None:
+    return next((item for item in _load_job_registry() if item.get("job_id") == job_id), None)
+
+
+def _list_job_records(limit: int = 50) -> list[dict]:
+    rows = _load_job_registry()
+    rows.sort(key=lambda item: item.get("updated_at", item.get("created_at", "")), reverse=True)
+    return rows[:limit]
 
 
 def _mapping_path(job_id: str) -> Path:
@@ -1200,6 +1254,7 @@ def upload_file():
     f.save(upload_path)
 
     redirect_url = url_for("mapping_page", job_id=job_id)
+    _upsert_job_record(job_id, status="uploaded", filename=upload_path.name, display_filename=_display_filename(upload_path.name))
     if wants_json:
         return jsonify({"job_id": job_id, "redirect_url": redirect_url, "filename": upload_path.name})
     return render_template("upload-complete.html", job_id=job_id, redirect_url=redirect_url, display_filename=_display_filename(upload_path.name))
@@ -1221,6 +1276,7 @@ def inspect_file():
     job_id = uuid.uuid4().hex[:12]
     upload_path = UPLOAD_DIR / f"{job_id}_{Path(f.filename).name}"
     f.save(upload_path)
+    _upsert_job_record(job_id, status="uploaded", filename=upload_path.name, display_filename=_display_filename(upload_path.name))
 
     try:
         context = _mapping_context(upload_path.name, job_id=job_id)
@@ -1267,6 +1323,7 @@ def preview_mapping():
     except ValueError as exc:
         return jsonify({"error": str(exc)}), 400
     _persist_mapping_state(job_id, mapping_state)
+    _upsert_job_record(job_id, status="mapped", filename=filename, display_filename=_display_filename(filename), target_column=mapping_state.get("target_column"), predictor_count=len(mapping_state.get("predictor_columns") or []))
     bundle = build_prep_bundle(
         UPLOAD_DIR / filename,
         recode_definitions=mapping_state["recode_definitions"],
@@ -1297,6 +1354,39 @@ def upload_codebook(job_id: str):
     _persist_mapping_state(job_id, mapping_state)
     context = _mapping_context(filename, job_id=job_id, mapping_state=mapping_state)
     return jsonify({"display_name_map": context["saved_display_name_map"], "recommendation": context["recommendation"]})
+
+
+def _run_job_command(job_id: str, filename: str, mapping_path: Path, data_path: Path) -> None:
+    job_dir = _job_dir(job_id)
+    json_path = job_dir / "analysis_run.json"
+    pptx_path = job_dir / "report.pptx"
+    cmd = [
+        str(ROOT / ".venv" / "bin" / "python"),
+        str(ROOT / "tundralis_kda.py"),
+        "--data", str(data_path),
+        "--mapping-config", str(mapping_path),
+        "--no-ai",
+        "--json-output", str(json_path),
+        "--output", str(pptx_path),
+    ]
+    _upsert_job_record(job_id, status="running")
+    result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
+    if result.returncode != 0:
+        _upsert_job_record(job_id, status="failed", error=(result.stderr or result.stdout or "Run failed.")[:1000])
+        return
+    try:
+        result_context = _load_result_context(job_id, logs=result.stdout)
+        payload = result_context.get("payload") or {}
+        input_summary = payload.get("input_summary") or {}
+        _upsert_job_record(
+            job_id,
+            status="completed",
+            predictor_count=len(input_summary.get("predictor_columns") or []),
+            rows_modeled=input_summary.get("rows_modeled"),
+            error=None,
+        )
+    except Exception as exc:
+        _upsert_job_record(job_id, status="failed", error=f"Run finished but result loading failed: {exc}")
 
 
 def _load_result_context(job_id: str, *, logs: str = "") -> dict:
@@ -1399,30 +1489,37 @@ def run_job():
     }
     mapping_path = _persist_mapping_state(job_id, mapping)
 
-    job_dir = _job_dir(job_id)
-    json_path = job_dir / "analysis_run.json"
-    pptx_path = job_dir / "report.pptx"
+    _upsert_job_record(job_id, status="queued", filename=filename, display_filename=_display_filename(filename), target_column=target_column, predictor_count=len(predictors), error=None)
+    Thread(target=_run_job_command, args=(job_id, filename, mapping_path, data_path), daemon=True).start()
+    return redirect(url_for("job_status_page", job_id=job_id))
 
-    cmd = [
-        str(ROOT / ".venv" / "bin" / "python"),
-        str(ROOT / "tundralis_kda.py"),
-        "--data", str(data_path),
-        "--mapping-config", str(mapping_path),
-        "--no-ai",
-        "--json-output", str(json_path),
-        "--output", str(pptx_path),
-    ]
-    result = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
 
-    if result.returncode != 0:
-        return render_template(
-            "mapping.html",
-            error=result.stderr or result.stdout or "Run failed.",
-            **context,
-        ), 500
+@app.get("/jobs")
+@basic_auth
+def jobs_page():
+    return render_template("jobs.html", jobs=_list_job_records())
 
-    result_context = _load_result_context(job_id, logs=result.stdout)
-    return render_template("result.html", **result_context)
+
+@app.get("/jobs/<job_id>")
+@basic_auth
+def job_status_page(job_id: str):
+    job = _get_job_record(job_id)
+    if not job:
+        abort(404)
+    if job.get("status") == "completed":
+        return render_template("result.html", **_load_result_context(job_id))
+    if job.get("status") in {"mapped", "uploaded", "failed", "running", "queued"}:
+        filename = _lookup_uploaded_filename(job_id)
+        if not filename:
+            abort(404)
+        mapping_state = _load_mapping_state(job_id)
+        context = _mapping_context(filename, job_id=job_id, mapping_state=mapping_state)
+        if job.get("status") == "failed" and job.get("error"):
+            context["error"] = job.get("error")
+        context["job_status"] = job.get("status")
+        context["job_status_error"] = job.get("error")
+        return render_template("mapping.html", **context)
+    abort(404)
 
 
 @app.get("/results/<job_id>")

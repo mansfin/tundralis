@@ -1,5 +1,6 @@
 import io
 import json
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -677,18 +678,17 @@ class TestWebMapping(unittest.TestCase):
                 "display_name__value_for_money": "Value For Money",
             },
         )
-        self.assertEqual(run_response.status_code, 200)
-        run_html = run_response.get_data(as_text=True)
-        self.assertIn("Analysis complete", run_html)
-        self.assertIn("Download report", run_html)
-        self.assertIn("Decision summary", run_html)
+        self.assertEqual(run_response.status_code, 302)
+        self.assertIn(f"/jobs/{job_id}", run_response.headers.get("Location", ""))
 
         artifacts_dir = ROOT / "app_runtime" / "artifacts" / job_id
         mapping_path = ROOT / "app_runtime" / "mappings" / f"{job_id}.json"
         self.assertTrue(mapping_path.exists())
+        deadline = time.time() + 10
+        while time.time() < deadline and not (artifacts_dir / "analysis_run.json").exists():
+            time.sleep(0.2)
         self.assertTrue((artifacts_dir / "analysis_run.json").exists())
         self.assertTrue((artifacts_dir / "report.pptx").exists())
-        self.assertTrue((artifacts_dir / "importance_bar.png").exists())
 
         durable_response = client.get(f"/results/{job_id}")
         self.assertEqual(durable_response.status_code, 200)
@@ -786,12 +786,19 @@ class TestWebMapping(unittest.TestCase):
                 "semantic_overrides": json.dumps({}),
             },
         )
-        self.assertEqual(run_response.status_code, 200)
-        self.assertIn("Analysis complete", run_response.get_data(as_text=True))
+        self.assertEqual(run_response.status_code, 302)
+        self.assertIn(f"/jobs/{job_id}", run_response.headers.get("Location", ""))
 
         mapping_path = ROOT / "app_runtime" / "mappings" / f"{job_id}.json"
-        results_response = client.get(f"/results/{job_id}")
         self.assertTrue(mapping_path.exists())
+        deadline = time.time() + 10
+        results_response = None
+        while time.time() < deadline:
+            results_response = client.get(f"/results/{job_id}")
+            if results_response.status_code == 200:
+                break
+            time.sleep(0.2)
+        self.assertIsNotNone(results_response)
         self.assertEqual(results_response.status_code, 200)
         self.assertIn("Decision summary", results_response.get_data(as_text=True))
 
@@ -862,8 +869,12 @@ class TestWebMapping(unittest.TestCase):
                 },
             )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"/jobs/{job_id}", response.headers.get("Location", ""))
         mapping_path = ROOT / "app_runtime" / "mappings" / f"{job_id}.json"
+        deadline = time.time() + 10
+        while time.time() < deadline and not mapping_path.exists():
+            time.sleep(0.2)
         mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
         self.assertEqual(mapping["semantic_overrides"].get("NPS_2"), "ordinal_numeric")
         self.assertEqual(mapping["display_name_map"].get("NPS_2"), "Likelihood to recommend")
@@ -982,8 +993,17 @@ class TestWebMapping(unittest.TestCase):
             },
         )
 
-        self.assertEqual(response.status_code, 200)
-        html = response.get_data(as_text=True)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"/jobs/{job_id}", response.headers.get("Location", ""))
+        deadline = time.time() + 10
+        html = None
+        while time.time() < deadline:
+            result_response = client.get(f"/results/{job_id}")
+            if result_response.status_code == 200:
+                html = result_response.get_data(as_text=True)
+                break
+            time.sleep(0.2)
+        self.assertIsNotNone(html)
         self.assertIn("Enterprise only", html)
         self.assertIn("Segment insights", html)
         self.assertIn("Top actions to prioritize", html)
