@@ -1346,6 +1346,14 @@ def _load_result_context(job_id: str, *, logs: str = "") -> dict:
 def run_job():
     job_id = request.form.get("job_id") or uuid.uuid4().hex[:12]
     filename = request.form.get("filename")
+    app.logger.info(
+        "RUN_DEBUG job_id=%s filename=%s form_keys=%s predictor_count=%s target=%s",
+        job_id,
+        filename,
+        sorted(request.form.keys()),
+        len(request.form.getlist("predictor_columns")),
+        request.form.get("target_column"),
+    )
     if not filename:
         abort(400)
 

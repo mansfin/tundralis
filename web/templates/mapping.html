@@ -2612,6 +2612,17 @@
       Array.from(document.querySelectorAll('input[name="predictor_columns"]')).forEach((el) => { el.checked = false; });
       rebuildPredictorUI();
     });
+    document.getElementById('mappingForm')?.addEventListener('submit', () => {
+      window.__tundralisRunDebug = {
+        at: new Date().toISOString(),
+        action: document.getElementById('mappingForm')?.action,
+        method: document.getElementById('mappingForm')?.method,
+        target: document.getElementById('targetColumnSelect')?.value,
+        predictorCheckedCount: Array.from(document.querySelectorAll('input[name="predictor_columns"]')).filter((el) => el.checked).length,
+        hiddenFields: Array.from(document.querySelectorAll('#mappingForm input[type="hidden"]')).map((el) => ({ name: el.name, value: (el.value || '').slice(0, 120) })),
+      };
+      console.log('TUNDRALIS_RUN_DEBUG', window.__tundralisRunDebug);
+    });
 
     syncSectionToggle(document.getElementById('toggleRecommendationDetails'), recommendationDetailsPanel, 'Hide details', 'See details');
     syncSectionToggle(document.getElementById('toggleLabelTools'), labelToolsPanel, 'Hide tools', 'Show tools');
