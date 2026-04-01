@@ -2494,10 +2494,9 @@
         return false;
       }
       savedDisplayNameMap = collectDisplayNameMap();
-      syncDisplayNameHiddenFields();
-      syncSegmentDefinitionInput();
-      syncRecodeDefinitionInput();
-      syncSemanticOverrideInput();
+      segmentDefinitionsInput.value = JSON.stringify(savedSegmentDefs || []);
+      recodeDefinitionsInput.value = JSON.stringify(savedRecodesState || []);
+      semanticOverridesInput.value = JSON.stringify(savedSemanticOverrides || {});
       if (typeof currentPredictorSelections === 'function') {
         rebuildPredictorUI();
       }
